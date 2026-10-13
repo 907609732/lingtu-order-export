@@ -15,7 +15,7 @@ export interface Order {
 }
 export interface Task {
   id: string; platform: PlatformId; account: string; from: string; to: string; status: TaskStatus; createdAt: string; updatedAt: string
-  count: number; pages: number; message: string; cursor: string; exportedPath: string
+  count: number; pages: number; message: string; cursor: string; exportedPath: string; accountKey?: string
 }
 export interface StartInput { platform: PlatformId; from: string; to: string }
 export interface ExportInput { taskId: string; format: 'xlsx' | 'csv'; images: boolean }

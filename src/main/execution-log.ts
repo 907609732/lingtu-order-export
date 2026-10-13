@@ -15,7 +15,7 @@ const operations:Record<string,string>={start:'开始采集',login:'打开平台
 const number=(value:unknown)=>typeof value==='number'&&Number.isFinite(value)?Math.max(0,Math.round(value)):0
 function stage(c:Record<string,unknown>):string {
   if(c.phase==='response')return '等待小程序订单数据'
-  if(c.phase==='page')return `读取${c.year?`${number(c.year)} 年` : ''}第 ${number(c.page)} 页订单`
+  if(c.phase==='page')return `读取${c.year?`${number(c.year)} 年` : ''}${c.month?`${number(c.month)} 月` : ''}第 ${number(c.page)} 页订单`
   if(c.phase==='detail')return `补全订单详情 ${number(c.current)} / ${number(c.total)}`
   if(c.phase==='images')return `处理商品图片 ${number(c.current)} / ${number(c.total)}`
   if(c.phase==='write')return '写入导出文件'
@@ -39,7 +39,7 @@ export class ExecutionLog {
       case 'collector.start':message=`开始采集订单，当前已保存 ${count} 笔。`;break
       case 'collector.stage':message=`正在${stage(c)}…`;break
       case 'collector.wait':case 'export.wait':message=`仍在${stage(c)}，已等待 ${number(c.seconds)} 秒，请稍候…`;break
-      case 'collector.page':message=`${c.year?`${number(c.year)} 年` : ''}第 ${page} 页读取完成，本页识别 ${received} 笔，所选范围内累计 ${count} 笔。`;level='success';break
+      case 'collector.page':message=`${c.year?`${number(c.year)} 年` : ''}${c.month?`${number(c.month)} 月` : ''}第 ${page} 页读取完成，本页识别 ${received} 笔，所选范围内累计 ${count} 笔。`;level='success';break
       case 'collector.response':if(received)message=`收到平台订单数据，识别 ${received} 笔，范围内累计 ${count} 笔。${number(c.unknown)?`另有 ${number(c.unknown)} 笔缺少日期，未计入。`:''}`;break
       case 'collector.detail':message=`订单详情已处理 ${number(c.current)} / ${number(c.total)}。`;break
       case 'collector.detail_failed':message='本笔订单详情暂未获取，保留缺项标记并继续。';break

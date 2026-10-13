@@ -31,7 +31,7 @@ const enums:Record<string,readonly string[]> = {
   phase:['platform','page','detail','rows','images','write','response'],action:['pause','resume','retry','finish'],
   reason:['clean-exit','abnormal-exit','killed','crashed','oom','launch-failed','integrity-failure','memory-eviction']
 }
-const counters = new Set(['count','pages','page','received','missing','unknown','durationMs','exitCode','networkCode','current','total','seconds','year'])
+const counters = new Set(['count','pages','page','received','missing','unknown','durationMs','exitCode','networkCode','current','total','seconds','year','month'])
 const errorNames = new Set(['Error','TypeError','RangeError','SyntaxError','ReferenceError','URIError','EvalError','AggregateError','AbortError','TimeoutError'])
 const errorCodes = new Set(['ENOENT','EACCES','EPERM','ENOSPC','EIO','EBUSY','EEXIST','EADDRINUSE','ECONNRESET','ECONNREFUSED','ETIMEDOUT','ENOTFOUND','ERR_NETWORK','ERR_ABORTED','SQLITE_BUSY','SQLITE_ERROR'])
 const writeFailure = '日志写入失败，请检查磁盘空间和文件夹权限，再重新开启日志。'

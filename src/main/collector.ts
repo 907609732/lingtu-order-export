@@ -1,5 +1,6 @@
 import { BrowserWindow, WebContentsView, session } from 'electron'
 import { setTimeout as delay } from 'node:timers/promises'
+import { createHash } from 'node:crypto'
 import type { Order, PlatformId, Task } from '../shared/types'
 import { allowedHost, isOrderResponse, platformById } from '../shared/platforms'
 import { Store } from '../core/store'
@@ -9,6 +10,10 @@ import { advanceOrderPage, mtopRequest, readOrderPage } from './page-scripts'
 import { safeError, type Diagnostics } from './diagnostics'
 import { CollectionError, mtopFailure, unwrapMtopResponse } from './collection-errors'
 import { ExecutionProgress } from './execution-progress'
+import { taobaoListData, taobaoMonths, taobaoNextPage } from './taobao-contract'
+import { parsePddList, parsePddDetailHtml } from './pdd-contract'
+import { pddPageRequest, pddDetailRequest } from './pdd-page'
+import { normalizePddDetail } from '../core/pdd-normalize'
 export class Collector {
   views=new Map<PlatformId,WebContentsView>(); current?:WebContentsView; active?:string; stopped=new Set<string>(); runs=new Set<string>(); private captureCount=0; private disposing=false
   constructor(private win:BrowserWindow,private store:Store,private changed:()=>void,private diagnostics:Diagnostics){win.on('resize',()=>this.layout())}
@@ -51,6 +56,9 @@ export class Collector {
   }
   accept(platform:PlatformId,body:string):void{
     if(!this.active)return;const task=this.store.get(this.active);if(task.platform!==platform||task.status!=='running')return
+    // Taobao list responses belong to an explicit month/page request below.
+    // Unrelated official-page refreshes must not change its cursor or page count.
+    if(platform==='taobao'||platform==='pdd')return
     try{
       const orders=normalizePayload(platform,parsePayload(body));if(!orders.length){this.diagnostics.event('collector.response',{platform,taskId:task.id,received:0});return}
       const unknown=orders.filter(o=>!o.createdAt).length;const count=this.store.add(task.id,orders);this.captureCount++
@@ -71,6 +79,7 @@ export class Collector {
       if(task.platform==='xianyu')await this.runXianyu(task,view)
       else if(task.platform==='alibaba')await this.runAlibaba(task,view)
       else if(task.platform==='taobao')await this.runTaobao(task,view)
+      else if(task.platform==='pdd')await this.runPdd(task,view)
       else if(task.platform==='jd')await this.runJD(task,view)
       else { await view.webContents.loadURL(platformById(task.platform).url);if(!this.stopped.has(task.id))await this.runPage(task,view) }
     }catch(e){interrupted=true;this.diagnostics.event('collector.failed',{platform:task.platform,taskId:task.id},e);if(!this.stopped.has(task.id)){const category=safeError(e).category;this.store.update(task.id,{status:category==='login_or_verification'?'needs_login':this.store.get(task.id).count?'partial':'failed',message:e instanceof Error?e.message:'采集暂时失败，请打开平台页检查'});this.changed()}}
@@ -133,23 +142,81 @@ export class Collector {
     if(!this.stopped.has(task.id)){this.store.update(task.id,{status:'partial',message:'京东所选年份列表已读取，订单详情和平台完整范围仍需核对'});this.changed()}
   }
   async runTaobao(task:Task,view:WebContentsView){
-    for(let page=1;page<=1000&&!this.stopped.has(task.id);page++){
-      this.stage(task,{phase:'page',page})
-      const data={tabCode:'all',page,OrderType:'OrderList',appName:'tborder',appVersion:'3.0',condition:JSON.stringify({directRouteToTm2Scene:'1'}),__needlessClearProtocol__:true}
-      const response=await this.request(view,'mtop.taobao.order.queryboughtlistV2',data,'taobao')
-      const nodes=response?.data?.data,pagination=nodes?.pagination?.fields,control=response?.data?.global?.pageControl
-      if(!nodes||(!pagination&&!control))throw new CollectionError('response_structure')
-      const orders=normalizePayload('taobao',response);this.store.add(task.id,orders)
-      this.pageRead(task,page,orders.length)
-      this.store.update(task.id,{pages:page,cursor:String(page),message:`正在读取淘宝第 ${page} 页`});this.changed()
-      const total=Number(pagination?.totalNum),size=Number(pagination?.pageSize)
-      if(control?.emptyPage===true||control?.emptyPage==='true'||(Number.isFinite(total)&&size>0&&page*size>=total)){
-        this.store.update(task.id,{status:'partial',message:'淘宝列表读取结束；订单详情仍需补全，已有结果可以导出'});this.changed();return
+    const months=taobaoMonths(task.from,task.to)
+    let start=0,firstPage=1,reads=0
+    if(task.cursor)try{const c=JSON.parse(task.cursor);if(months.includes(c.month)&&Number.isSafeInteger(c.nextPage)&&c.nextPage>0){start=months.indexOf(c.month);firstPage=c.nextPage}}catch{}
+    for(let index=start;index<months.length&&!this.stopped.has(task.id);index++){
+      let page=index===start?firstPage:1,signature=''
+      while(!this.stopped.has(task.id)&&reads<1000){
+        const month=months[index],context={phase:'page',page,year:Number(month.slice(0,4)),month:Number(month.slice(5,7))}
+        this.stage(task,context)
+        const response=await this.request(view,'mtop.taobao.order.queryboughtlistV2',taobaoListData(month,page),'taobao')
+        if(this.stopped.has(task.id))return
+        const orders=normalizePayload('taobao',response),nextSignature=orders.map(o=>o.id).sort().join('|')
+        if(orders.length&&signature===nextSignature)throw new CollectionError('response_structure')
+        signature=nextSignature
+        this.store.add(task.id,orders)
+        const next=taobaoNextPage(response,page,orders.length)
+        const cursor=next?{month,nextPage:next}:index+1<months.length?{month:months[index+1],nextPage:1}:undefined
+        this.store.update(task.id,{pages:this.store.get(task.id).pages+1,cursor:cursor?JSON.stringify(cursor):'',message:`正在读取淘宝 ${month} 第 ${page} 页`});this.changed()
+        this.pageRead(task,page,orders.length,context);reads++
+        if(next===null)break
+        page=next;await delay(1600)
       }
-      if(!orders.length)throw new Error('平台订单结构暂未识别，已保留此前结果，请核对平台页面')
-      await delay(1600)
+      if(reads>=1000){this.store.update(task.id,{status:'partial',message:'本次达到分页上限，已保存月份和页码，可继续采集'});this.changed();return}
+      if(index+1<months.length)await delay(1600)
     }
-    if(!this.stopped.has(task.id)){this.store.update(task.id,{status:'partial',message:'本次达到分页上限，已有结果可导出'});this.changed()}
+    if(!this.stopped.has(task.id)){this.store.update(task.id,{status:'partial',message:'淘宝所选月份列表已读取；订单详情仍需补全，已有结果可以导出'});this.changed()}
+  }
+  private async pddIdentity(task:Task,view:WebContentsView){
+    const cookies=await view.webContents.session.cookies.get({url:'https://mobile.yangkeduo.com/'})
+    const accessToken=cookies.find(c=>c.name==='PDDAccessToken')?.value||'',userId=cookies.find(c=>c.name==='pdd_user_id')?.value||''
+    if(!accessToken||!/^\d{1,40}$/.test(userId))throw new CollectionError('login_or_verification')
+    const accountKey=createHash('sha256').update('orderdesk:pdd:'+userId).digest('hex'),latest=this.store.get(task.id)
+    if((latest.accountKey&&latest.accountKey!==accountKey)||(!latest.accountKey&&latest.count>0))throw new CollectionError('account_changed')
+    if(!latest.accountKey)this.store.update(task.id,{accountKey})
+    return {accessToken,userId}
+  }
+  async runPdd(task:Task,view:WebContentsView){
+    let offset='0'
+    if(task.cursor)try{const c=JSON.parse(task.cursor);if(c.kind==='pdd'&&typeof c.offset==='string')offset=c.offset}catch{}
+    const seen=new Set<string>()
+    for(let read=0;read<1000&&!this.stopped.has(task.id);read++){
+      if(seen.has(offset))throw new CollectionError('response_structure');seen.add(offset)
+      const page=this.store.get(task.id).pages+1;this.stage(task,{phase:'page',page})
+      const {accessToken,userId}=await this.pddIdentity(task,view)
+      const result=unwrapMtopResponse(await view.webContents.executeJavaScript(`(${pddPageRequest.toString()})(${JSON.stringify(accessToken)},${JSON.stringify(userId)},${JSON.stringify(offset)})`))
+      if(this.stopped.has(task.id))return
+      await this.pddIdentity(task,view)
+      const response= parsePayload(result.body),batch=parsePddList(response,offset),orders=normalizePayload('pdd',response)
+      if(batch.orders.length!==orders.length)throw new CollectionError('response_structure')
+      this.store.add(task.id,orders)
+      const lastDate=orders.at(-1)?.createdAt,ended=batch.ended||!!(lastDate&&lastDate.slice(0,10)<task.from)
+      this.store.update(task.id,{pages:page,cursor:ended?'':JSON.stringify({kind:'pdd',offset:batch.nextOffset}),message:`正在读取拼多多第 ${page} 页`});this.changed()
+      this.pageRead(task,page,orders.length)
+      if(ended){await this.pddDetails(task,view);if(!this.stopped.has(task.id)){this.store.update(task.id,{status:'partial',message:'拼多多列表和详情已处理；可导出结果及缺项清单，平台完整范围仍需核对'});this.changed()}return}
+      offset=batch.nextOffset!;await delay(1600)
+    }
+    if(!this.stopped.has(task.id)){this.store.update(task.id,{status:'partial',message:'本次达到分页上限，已保存进度，可继续采集'});this.changed()}
+  }
+  private async pddDetails(task:Task,view:WebContentsView){
+    const orders=this.store.orders(task.id).filter(o=>o.detailState!=='complete')
+    for(let i=0;i<orders.length&&!this.stopped.has(task.id);i++){
+      this.stage(task,{phase:'detail',current:i+1,total:orders.length})
+      await this.pddIdentity(task,view)
+      try{
+        const result=unwrapMtopResponse(await view.webContents.executeJavaScript(`(${pddDetailRequest.toString()})(${JSON.stringify(orders[i].id)})`))
+        if(this.stopped.has(task.id))return
+        await this.pddIdentity(task,view)
+        this.store.add(task.id,[normalizePddDetail(orders[i],parsePddDetailHtml(result.body,orders[i].id))])
+      }catch(error){
+        if(error instanceof CollectionError&&['login_or_verification','account_changed','platform_limit'].includes(error.category))throw error
+        this.diagnostics.event('collector.detail_failed',{platform:task.platform,taskId:task.id},error,'warn')
+      }
+      this.store.update(task.id,{message:`正在补全拼多多订单详情 ${i+1} / ${orders.length}`});this.changed()
+      this.diagnostics.event('collector.detail',{platform:task.platform,taskId:task.id,current:i+1,total:orders.length})
+      if(i+1<orders.length)await delay(900)
+    }
   }
   async xianyuDetails(task:Task,view:WebContentsView){
     const all=this.store.orders(task.id)

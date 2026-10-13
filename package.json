@@ -1,6 +1,6 @@
 {
   "name": "order-export-desk",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "本机多平台买家订单导出",
   "author": "Local Order Desk",
   "private": true,

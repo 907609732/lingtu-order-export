@@ -27,6 +27,7 @@ export const collectionFailureText:Record<string,string>={
   timeout:'等待平台响应超时，请检查网络后重试。',
   network:'网络请求失败，请检查网络后重试。',
   page_not_ready:'平台页面尚未准备好，请等订单列表显示后继续。',
+  account_changed:'当前登录账号与任务账号不一致，或旧任务尚未绑定账号；请切回原账号，或新建采集任务。',
   response_structure:'平台返回的订单结构暂未识别，已有结果已保留。'
 }
 export class CollectionError extends Error {

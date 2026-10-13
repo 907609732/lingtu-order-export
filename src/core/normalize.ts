@@ -1,6 +1,7 @@
 import JSONbig from 'json-bigint'
 import type { Item, Order, PlatformId } from '../shared/types'
 import { dateText, moneyFen, pick, text } from './values'
+import { normalizePddList } from './pdd-normalize'
 const JSONSafe = JSONbig({ storeAsString: true, protoAction: 'ignore', constructorAction: 'ignore' })
 export function parsePayload(body: string): any {
   if (body.length>12*1024*1024) throw new Error('订单响应过大')
@@ -60,11 +61,33 @@ function taobaoComponents(payload:any):Order[]|null {
   const nodes=payload?.data?.data
   if(!nodes||typeof nodes!=='object'||!Object.values(nodes).some((v:any)=>v?.tag==='shopInfo'))return null
   const all=Object.values(nodes) as any[]
-  return all.filter(v=>v?.tag==='shopInfo').map(node=>{
+  const structure=payload?.data?.hierarchy?.structure
+  const descendants=(key:string)=>{
+    const result:any[]=[],visited=new Set<string>(),pending=[key]
+    while(pending.length&&visited.size<80000){const next=pending.shift()!;if(visited.has(next))continue;visited.add(next);if(nodes[next])result.push(nodes[next]);for(const child of structure?.[next]||[])if(typeof child==='string')pending.push(child)}
+    return result
+  }
+  // Hierarchy links define which payment and item nodes belong to a displayed
+  // order. A response may also contain unrelated or stale component nodes.
+  const scopedHierarchy=Array.isArray(structure?.orderContainer)
+  const groups:Array<{node:any;members:any[]}>=scopedHierarchy
+    ?structure.orderContainer.filter((key:unknown)=>typeof key==='string'&&key.startsWith('shopOrderContainer_')).map((key:string)=>{const members=descendants(key);return{node:members.find(v=>v?.tag==='shopInfo'),members}}).filter((g:any)=>g.node)
+    :all.filter(v=>v?.tag==='shopInfo').map(node=>({node,members:all}))
+  const absolute=(value:string)=>value.replace(/^\/\//,'https://')
+  return groups.map(({node,members})=>{
     const raw=node.fields||{},id=s(raw,'orderId')||s(node,'id'),o=base('taobao',{...raw,orderId:id})
-    const payment=all.find(v=>v.tag==='orderPayment'&&s(v,'id')===id)?.fields||{}
-    o.createdAt=dateText(pick(raw,'createTime','createDay'));o.status=s(raw,'tradeTitle');o.shop=s(raw,'shopName','sellerName');o.sellerId=s(raw,'sellerId');o.detailUrl=s(raw,'orderDetailUrl');o.paidFen=moneyFen(pick(payment,'actualFee.value'));o.freightFen=moneyFen(pick(payment,'pcPostFee.value'))
-    o.items=all.filter(v=>v.tag==='orderItemInfo'&&s(v,'fields.orderId')===id).map((v,index)=>{const raw=v.fields.item||{};return {...item(raw,index,'yuan'),id:s(raw,'itemId'),quantity:Number(raw.quantity)||null,spec:s(raw,'skuText'),imageUrl:s(raw,'pic').replace(/^\/\//,'https://'),productUrl:s(raw,'outerUrl'),unitPriceFen:moneyFen(pick(raw,'priceInfo.actualTotalFee')),extra:{'子订单号':s(v,'id').slice(id.length+1)}}})
+    const payment=members.find(v=>v.tag==='orderPayment'&&(scopedHierarchy||s(v,'id')===id))?.fields||{}
+    o.createdAt=dateText(pick(raw,'createTime','createDay'));o.status=s(raw,'tradeTitle');o.shop=s(raw,'shopName','sellerName');o.sellerId=s(raw,'sellerId');o.detailUrl=absolute(s(raw,'orderDetailUrl'));o.paidFen=moneyFen(pick(payment,'actualFee.value'));o.freightFen=moneyFen(pick(payment,'pcPostFee.value'))
+    if(!o.sellerId)try{o.sellerId=new URL(absolute(s(raw,'outUrl'))).searchParams.get('user_number_id')||''}catch{}
+    o.items=members.filter(v=>v.tag==='orderItemInfo'&&s(v,'fields.orderId')===id).map((v,index)=>{
+      const raw=v.fields.item||{},nodeId=s(v,'id'),prefix=id+'_',subOrderId=nodeId.startsWith(prefix)?nodeId.slice(prefix.length):'',productId=s(raw,'itemId')
+      const amount=typeof raw.quantity==='string'||typeof raw.quantity==='number'?Number(raw.quantity):NaN
+      const quantity=Number.isFinite(amount)&&amount>0?amount:null,total=moneyFen(pick(raw,'priceInfo.actualTotalFee'))
+      const sku=Array.isArray(raw.skuInfo)?raw.skuInfo.map((p:any)=>[s(p,'skuKey'),s(p,'skuValue','skuText')].filter(Boolean).join(':')).filter(Boolean).join('; '):''
+      // actualTotalFee is the sub-order total, not a unit price. Preserve its
+      // exact cents separately; do not invent a rounded price for multiple units.
+      return {...item(raw,index,'yuan'),id:subOrderId||nodeId||productId||String(index),quantity,spec:sku||s(raw,'skuText'),imageUrl:absolute(s(raw,'pic')),productUrl:absolute(s(raw,'itemUrl','outerUrl')),unitPriceFen:quantity===1?total:null,extra:{'子订单号':subOrderId,'商品ID':productId,'SKU ID':s(raw,'skuId'),'商品实付合计(元)':total===null?'':(total/100).toFixed(2),'商品退款状态':s(raw,'refundStatus')}}
+    })
     o.detailState='pending';o.missing=['订单详情'];if(!o.createdAt)o.missing.push('订单日期');if(o.paidFen===null)o.missing.push('实付款');if(!o.items.some(i=>i.title))o.missing.push('商品信息');return o
   })
 }
@@ -81,6 +104,7 @@ function qualifies(platform:PlatformId, o:any):boolean {
   return itemsOf(o)!==undefined && (!!pick(o,'orderGoods','order_goods','goods_list','goodsList','subOrders','orderEntries','productList','products','orderItemList','foodlist','food_list','items','goodsName','title','goods_name','detailList') || !!pick(o,'createTime','create_time','orderTime','order_time','gmtCreate','addTime','ctime'))
 }
 export function normalizePayload(platform:PlatformId,payload:any):Order[] {
+  if(platform==='pdd'&&Array.isArray(payload?.orders))return payload.orders.map((v:any)=>normalizePddList(v)).filter((v:Order|null):v is Order=>v!==null)
   if(platform==='taobao'){const components=taobaoComponents(payload);if(components)return components}
   const found:Order[]=[]; let visited=0
   function walk(v:any,depth:number):void {

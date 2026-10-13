@@ -28,7 +28,7 @@ try{
   await page.evaluate(()=>window.desk.login('taobao'));await page.evaluate(()=>window.desk.hidePage())
   await page.getByLabel('开始日期').fill('2026-10-01');await page.getByLabel('结束日期').fill('2026-10-02')
   await page.getByRole('button',{name:'开始采集'}).click()
-  await expect(live).toContainText('正在读取第 1 页订单')
+  await expect(live).toContainText('正在读取2026 年10 月第 1 页订单')
   assert.equal((await page.evaluate(()=>window.desk.state())).tasks[0].status,'running')
   await expect(live).toContainText('已等待 10 秒',{timeout:22000})
   await page.screenshot({path:join(root,'live-wait.png')})

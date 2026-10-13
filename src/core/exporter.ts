@@ -9,6 +9,7 @@ const common:Column[]=[['订单号','id'],['下单时间','createdAt'],['商品�
 const xy:Column[]=[['订单号','id'],['创建时间','createdAt'],['商品标题','title'],['商品图片','imageUrl'],['实付款','paid'],['数量','quantity'],['订单状态','status'],['卖家昵称','shop'],['卖家ID','sellerId'],['商品ID','itemId'],['收货地址','address'],['运费','freight'],['闲鱼币抵扣','闲鱼币抵扣'],['支付宝交易号','支付宝交易号'],['付款时间','paidAt'],['发货时间','shippedAt'],['成交时间','completedAt']].map(([header,key])=>({header,key}))
 const cols=(pairs:string[][]):Column[]=>pairs.map(([header,key])=>({header,key}))
 const original:Partial<Record<PlatformId,Column[]>>={
+  taobao:[...common,...cols([['商品ID','itemId'],['子订单号','子订单号'],['SKU ID','SKU ID'],['商品实付合计(元)','商品实付合计(元)']])],
   xianyu:xy,
   pdd:cols([['商品图片','embeddedImage'],['下单日期','createdAt'],['商品ID','itemId'],['商品链接','productUrl'],['订单ID','id'],['商品名','title'],['商品图','imageUrl'],['价格','unitPrice'],['实付','paid'],['规格','spec'],['数量','quantity'],['店名','shop'],['店ID','sellerId'],['订单状态','status'],['收货人名','receiver'],['收货地址','address'],['收货电话','phone'],['快递公司','logistics'],['运单号','tracking'],['运费','freight'],['支付方式','支付方式'],['发货时间','shippedAt'],['备注','remark'],['快递状态','快递状态'],['收货时间','completedAt'],['用户名','account']]),
   dewu:cols([['订单号','id'],['支付单号','支付单号'],['订单状态','status'],['支付金额','paidFen'],['商品价格（元）','paid'],['商品标题','title'],['商品规格','spec'],['商品数量','quantity'],['商品单价','unitPriceFen'],['商品图片链接','imageUrl'],['买家名称','account'],['买家编号','buyerId'],['下单时间','createdAt'],['附加订单类型','附加订单类型']]),
@@ -20,7 +21,7 @@ const original:Partial<Record<PlatformId,Column[]>>={
 export function columnsFor(platform:PlatformId):Column[]{return original[platform]||common}
 const yuan=(v:number|null)=>v===null?'':v/100
 export function exportRows(orders:Order[]):Record<string,any>[] {
-  return orders.flatMap(o=> (o.items.length?(['eleme','meituan'].includes(o.platform)?o.items.slice(0,1):o.items):[{id:'',title:'',spec:'',quantity:null,unitPriceFen:null,imageUrl:'',productUrl:''} as Item]).map(i=>({...o,...o.extra,...i.extra,itemId:i.id,title:i.title,spec:i.spec,quantity:i.quantity??'',imageUrl:i.imageUrl,embeddedImage:i.imageUrl,productUrl:i.productUrl,unitPrice:yuan(i.unitPriceFen),unitPriceFen:i.unitPriceFen??'',paid:yuan(o.paidFen),freight:yuan(o.freightFen),refund:yuan(o.refundFen),allTitles:o.items.map(i=>i.title+(i.quantity&&i.quantity>1?` x${i.quantity}`:'')).join('\n'),itemCount:o.items.reduce((n,i)=>n+(i.quantity||0),0)||o.items.length})))
+  return orders.flatMap(o=> (o.items.length?(['eleme','meituan'].includes(o.platform)?o.items.slice(0,1):o.items):[{id:'',title:'',spec:'',quantity:null,unitPriceFen:null,imageUrl:'',productUrl:''} as Item]).map(i=>({...o,...o.extra,...i.extra,itemId:['taobao','pdd'].includes(o.platform)?i.extra?.['商品ID']||i.id:i.id,title:i.title,spec:i.spec,quantity:i.quantity??'',imageUrl:i.imageUrl,embeddedImage:i.imageUrl,productUrl:i.productUrl,unitPrice:yuan(i.unitPriceFen),unitPriceFen:i.unitPriceFen??'',paid:yuan(o.paidFen),freight:yuan(o.freightFen),refund:yuan(o.refundFen),allTitles:o.items.map(i=>i.title+(i.quantity&&i.quantity>1?` x${i.quantity}`:'')).join('\n'),itemCount:o.items.reduce((n,i)=>n+(i.quantity||0),0)||o.items.length})))
 }
 export type ImageLoader=(url:string)=>Promise<Buffer>
 export type ExportProgress={phase:'rows'|'images'|'write';current?:number;total?:number}
@@ -44,7 +45,7 @@ export async function exportOrders(task:Task,orders:Order[],directory:string,for
     for(const r of rows)sheet.addRow({...r,imageUrl:r.imageUrl})
     sheet.autoFilter={from:{row:1,column:1},to:{row:Math.max(1,rows.length+1),column:columns.length}}
     sheet.getRow(1).height=28;sheet.getRow(1).eachCell(c=>{c.font={bold:true,color:{argb:'FFFFFFFF'}};c.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF193E38'}};c.alignment={vertical:'middle'}})
-    for(const c of columns){if(['id','tracking','phone','itemId','sellerId','支付宝交易号'].includes(c.key))sheet.getColumn(c.key).numFmt='@';if(['paid','freight','refund','unitPrice'].includes(c.key))sheet.getColumn(c.key).numFmt='0.00'}
+    for(const c of columns){if(['id','tracking','phone','itemId','sellerId','支付宝交易号','子订单号','SKU ID'].includes(c.key))sheet.getColumn(c.key).numFmt='@';if(['paid','freight','refund','unitPrice'].includes(c.key))sheet.getColumn(c.key).numFmt='0.00'}
     const imageColumn=columns.findIndex(c=>c.key===(task.platform==='pdd'?'embeddedImage':'imageUrl'));const cache=new Map<string,number|Error>()
     if(images&&loadImage&&imageColumn>=0){
       const imageTotal=rows.filter(r=>r.imageUrl).length;let imageCurrent=0
