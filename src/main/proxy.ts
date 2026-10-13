@@ -4,15 +4,16 @@ import { join } from 'node:path'
 import { mkdir } from 'node:fs/promises'
 import { allowedHost, isOrderResponse } from '../shared/platforms'
 import type { PlatformId } from '../shared/types'
+import type { Diagnostics } from './diagnostics'
 // Only the explicitly selected platform is inspected. Other CONNECTs are tunneled unchanged.
 export class OrderProxy {
   private proxy?:Proxy;platform?:PlatformId;readonly port=17869;readonly certificate:string
-  constructor(private directory:string,private consume:(platform:PlatformId,body:string)=>void){this.certificate=join(directory,'certs','ca.pem')}
+  constructor(private directory:string,private consume:(platform:PlatformId,body:string)=>void,private diagnostics:Diagnostics){this.certificate=join(directory,'certs','ca.pem')}
   get running(){return !!this.proxy}
   async start(platform:PlatformId):Promise<void>{
-    if(this.proxy){this.platform=platform;return}
+    if(this.proxy){this.platform=platform;this.diagnostics.event('proxy.start',{platform});return}
     this.platform=platform;await mkdir(this.directory,{recursive:true});const proxy=new Proxy()
-    proxy.onError((_ctx,_err)=>{/* Do not log URLs, cookies or request bodies. Errors are surfaced by missing-response status. */})
+    proxy.onError((_ctx,error)=>this.diagnostics.event('proxy.error',{platform:this.platform},error,'warn'))
     proxy.onConnect((req,socket,head,done)=>{
       const target=req.url||'';const [host,portString]=target.split(':');const port=Number(portString||443)
       if(this.platform&&allowedHost(this.platform,host)){done();return}
@@ -30,6 +31,7 @@ export class OrderProxy {
       done()
     })
     await new Promise<void>((resolve,reject)=>proxy.listen({port:this.port,host:'127.0.0.1',sslCaDir:this.directory,timeout:25000},err=>err?reject(err):resolve()));this.proxy=proxy
+    this.diagnostics.event('proxy.start',{platform})
   }
-  stop(){this.proxy?.close();this.proxy=undefined;this.platform=undefined}
+  stop(){if(this.proxy)this.diagnostics.event('proxy.stop',{platform:this.platform});this.proxy?.close();this.proxy=undefined;this.platform=undefined}
 }

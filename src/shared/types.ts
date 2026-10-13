@@ -19,7 +19,8 @@ export interface Task {
 }
 export interface StartInput { platform: PlatformId; from: string; to: string }
 export interface ExportInput { taskId: string; format: 'xlsx' | 'csv'; images: boolean }
-export interface AppState { platforms: Platform[]; tasks: Task[]; outputDir: string; version: string; proxy: { running: boolean; port: number; certificate: string } }
+export interface LoggingState { enabled: boolean; directory: string; error: string }
+export interface AppState { platforms: Platform[]; tasks: Task[]; outputDir: string; version: string; logging: LoggingState; proxy: { running: boolean; port: number; certificate: string } }
 export interface DeskAPI {
   state(): Promise<AppState>; orders(taskId: string): Promise<Order[]>; start(input: StartInput): Promise<Task>
   login(platform: PlatformId): Promise<void>; pause(id: string): Promise<void>; resume(id: string): Promise<void>; finish(id: string): Promise<void>
@@ -27,4 +28,6 @@ export interface DeskAPI {
   chooseDirectory(): Promise<string>; openOutput(): Promise<void>; openExport(id: string): Promise<void>; clear(platform: PlatformId): Promise<void>
   proxyStart(platform: PlatformId): Promise<void>; proxyStop(): Promise<void>; certificate(): Promise<void>
   hidePage(): Promise<void>; proxySettings(): Promise<void>; onChange(callback: () => void): () => void
+  setLogging(enabled: boolean): Promise<void>; openLogs(): Promise<void>
+  reportError(origin: 'window' | 'promise' | 'vue', error: { name: string; message: string; stack: string }): Promise<void>
 }

@@ -15,6 +15,7 @@ try {
   app = await electron.launch({ executablePath: resolve('node_modules/electron/dist/electron.exe'), args: ['.'], env, timeout: 45000 })
   const page = await app.firstWindow()
   await page.getByRole('heading', { name: '淘宝 / 天猫订单导出' }).waitFor()
+  await page.evaluate(()=>window.desk.setLogging(true))
   const errors = []
   page.on('pageerror', error => errors.push(error.message))
   for (const label of ['1688','拼多多','京东','闲鱼','得物','快手','饿了么','美团','淘宝 / 天猫']) {
@@ -44,6 +45,9 @@ try {
   assert.equal(book.worksheets[0].getCell('E2').value, order.id)
   assert.equal(book.worksheets[0].getCell('I2').value, 40.5)
   assert.ok(book.getWorksheet('缺项清单'))
+  const logs=await readFile(join(root,'logs','main.log'),'utf8')
+  assert.ok(logs.includes('export.done'))
+  assert.ok(!logs.includes(order.id));assert.ok(!logs.includes(order.items[0].title))
   await page.screenshot({path:join(root,'exported.png')})
   await app.close(); app = undefined
   app = await electron.launch({ executablePath:resolve('node_modules/electron/dist/electron.exe'),args:['.'],env,timeout:45000 })

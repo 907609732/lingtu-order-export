@@ -1,6 +1,6 @@
 // Network-isolated integration tests. All accounts, orders and pages are synthetic.
 import { _electron as electron } from '@playwright/test'
-import { mkdtemp } from 'node:fs/promises'
+import { mkdtemp,readFile } from 'node:fs/promises'
 import { resolve,join } from 'node:path'
 import assert from 'node:assert/strict'
 import {setTimeout as delay} from 'node:timers/promises'
@@ -11,6 +11,7 @@ const orderSN='991001-000000000000001'
 try {
   app=await electron.launch({executablePath:resolve('node_modules/electron/dist/electron.exe'),args:['.'],env,timeout:45000})
   const page=await app.firstWindow();await page.getByRole('heading',{name:'淘宝 / 天猫订单导出'}).waitFor()
+  await page.evaluate(()=>window.desk.setLogging(true))
   await app.evaluate(({session},{orderSN})=>{
     for(const platform of ['taobao','alibaba','pdd','jd','xianyu']){
       const ses=session.fromPartition(`persist:orderdesk-${platform}`)
@@ -55,5 +56,9 @@ try {
     return Promise.all(all.map(w=>w.executeJavaScript('({node:typeof require,bridge:typeof window.desk})')))
   })
   assert.ok(isolated.every(v=>v.node==='undefined'&&v.bridge==='undefined'))
-  console.log(JSON.stringify({passed:true,synthetic:true,results,sandbox:true}))
+  const logs=await readFile(join(root,'logs','main.log'),'utf8')
+  for(const result of results)assert.ok(logs.includes(`"platform":"${result.platform}"`))
+  assert.ok(logs.includes('collector.page'));assert.ok(logs.includes('collector.response'));assert.ok(logs.includes('collector.end'))
+  for(const secret of [orderSN,'100000000000001','200000000000001','300000000000001','合成测试地址','合成用户','合成商品'])assert.ok(!logs.includes(secret))
+  console.log(JSON.stringify({passed:true,synthetic:true,results,sandbox:true,diagnosticLogs:true}))
 } finally {if(app)await app.close()}

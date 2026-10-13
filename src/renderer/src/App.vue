@@ -21,6 +21,7 @@ async function hidePage(){await desk.hidePage();pageOpen.value=false}
 async function start(){await action(async()=>{const t=await desk.start({platform:selected.value,from:from.value,to:to.value});taskId.value=t.id;page.value=1})}
 async function exportFile(){await action(async()=>{if(!state.value?.outputDir){await hidePage();await desk.chooseDirectory()};const r=await desk.export({taskId:taskId.value,format:format.value,images:images.value});notice.value=`已导出 ${r.count} 笔订单${r.missing?`，附 ${r.missing} 项核对说明`:''}。文件已保存到所选目录。`})}
 async function choose(){await hidePage();await action(()=>desk.chooseDirectory())}
+async function toggleLogging(){const enabled=!state.value?.logging.enabled;await action(()=>desk.setLogging(enabled),enabled?'问题排查日志已开启，复现问题后可打开日志文件夹查看。':'问题排查日志已关闭，已有日志仍保留在本机。')}
 async function navigate(s:'export'|'history'|'settings'){await hidePage();section.value=s}
 async function openTask(t:Task){selected.value=t.platform;taskId.value=t.id;from.value=t.from;to.value=t.to;section.value='export';page.value=1;await refresh()}
 onMounted(async()=>{await action(refresh);off=desk.onChange(()=>{if(refreshPending)return;refreshPending=true;setTimeout(()=>{refreshPending=false;void refresh()},250)})})
@@ -67,7 +68,19 @@ onUnmounted(()=>off?.())
           </template>
         </template>
         <template v-else-if="section==='history'"><div class="page-title"><div><div class="eyebrow">EXPORT HISTORY</div><h1>导出任务</h1><p>保留每次采集的结果，方便继续读取和重新导出。</p></div></div><section class="results-card"><div v-if="!state?.tasks.length" class="empty-state"><h3>暂无导出任务</h3><p>选择左侧平台开始第一次采集。</p></div><button v-for="t in state?.tasks" :key="t.id" class="history-row" @click="openTask(t)"><div><strong>{{state?.platforms.find(p=>p.id===t.platform)?.name}}</strong><span>{{t.from}} 至 {{t.to}}</span></div><span>{{t.count}} 笔</span><span class="tag">{{labels[t.status]}}</span><b>查看 →</b></button></section></template>
-        <template v-else><div class="page-title"><div><div class="eyebrow">PREFERENCES</div><h1>保存与设置</h1><p>简单设置，方便下次继续使用。</p></div></div><section class="settings-card"><h2>导出文件夹</h2><p class="path">{{state?.outputDir||'还未选择，首次导出前设置即可'}}</p><div class="button-row"><button class="primary" @click="choose">选择文件夹</button><button class="secondary" :disabled="!state?.outputDir" @click="action(()=>desk.openOutput())">打开文件夹</button></div></section><section class="settings-card"><h2>本机采集数据</h2><p>任务和订单持续保存在这台电脑。清理不会删除你已经导出的文件。</p><div class="button-row"><select v-model="selected"><option v-for="p in state?.platforms" :value="p.id">{{p.name}}</option></select><button class="secondary danger" @click="action(()=>desk.clear(selected),'已完成清理操作')">清理所选平台缓存</button></div></section><section class="settings-card"><h2>当前验证状态</h2><p>开发验证版。程序安装、样例解析和文件生成，与真实平台采集验收分别记录。请先使用短日期范围核对订单。</p></section></template>
+        <template v-else>
+          <div class="page-title"><div><div class="eyebrow">PREFERENCES</div><h1>保存与设置</h1><p>简单设置，方便下次继续使用。</p></div></div>
+          <section class="settings-card">
+            <div class="logging-row"><div><h2 id="logging-label">问题排查日志</h2><p id="logging-description">{{state?.logging.enabled?'已开启 · 正在记录运行过程':'已关闭 · 需要排查问题时开启'}}，重启后保留选择。</p></div><button role="switch" aria-labelledby="logging-label" aria-describedby="logging-description" :aria-checked="!!state?.logging.enabled" :disabled="busy||!state" class="log-switch" :class="{on:state?.logging.enabled}" @click="toggleLogging"><span></span></button></div>
+            <p>记录采集进度、导出结果和异常。日志仅存本机，不记录账号、Cookie、收货信息及订单正文。</p>
+            <p>每个日志约 5 MB，自动保留当前和上一份。关闭后停止新增，已有日志保留。</p>
+            <p v-if="state?.logging.error" class="log-error" role="alert">{{state.logging.error}}</p>
+            <div class="logging-folder"><button class="secondary" :disabled="busy" @click="action(()=>desk.openLogs())">打开日志文件夹</button><span class="path" :title="state?.logging.directory">{{state?.logging.directory}}</span></div>
+          </section>
+          <section class="settings-card"><h2>导出文件夹</h2><p class="path">{{state?.outputDir||'还未选择，首次导出前设置即可'}}</p><div class="button-row"><button class="primary" @click="choose">选择文件夹</button><button class="secondary" :disabled="!state?.outputDir" @click="action(()=>desk.openOutput())">打开文件夹</button></div></section>
+          <section class="settings-card"><h2>本机采集数据</h2><p>任务和订单持续保存在这台电脑。清理不会删除你已经导出的文件。</p><div class="button-row"><select v-model="selected"><option v-for="p in state?.platforms" :value="p.id">{{p.name}}</option></select><button class="secondary danger" @click="action(()=>desk.clear(selected),'已完成清理操作')">清理所选平台缓存</button></div></section>
+          <section class="settings-card"><h2>当前验证状态</h2><p>开发验证版。程序安装、样例解析和文件生成，与真实平台采集验收分别记录。请先使用短日期范围核对订单。</p></section>
+        </template>
       </div>
     </main>
   </div>

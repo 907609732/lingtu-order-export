@@ -8,14 +8,21 @@ import { exportOrders } from '../core/exporter'
 import { platforms,platformById } from '../shared/platforms'
 import { Collector } from './collector'
 import { OrderProxy } from './proxy'
+import { Diagnostics } from './diagnostics'
 import type { ExportInput,PlatformId,StartInput } from '../shared/types'
 const root=dirname(fileURLToPath(import.meta.url))
 app.setName('买家订单导出台')
-let store:Store,collector:Collector,proxy:OrderProxy,win:BrowserWindow;let exporting=false
+let store:Store,collector:Collector,proxy:OrderProxy,win:BrowserWindow,diagnostics:Diagnostics;let exporting=false
 if(process.env.ORDERDESK_TEST_DATA)app.setPath('userData',resolve(process.env.ORDERDESK_TEST_DATA))
 const change=()=>{if(win&&!win.isDestroyed())win.webContents.send('desk:changed')}
-const run=(id:string)=>{void collector.run(store.get(id)).catch(e=>{store.update(id,{status:'failed',message:e.message});change()})}
-function bind(name:string,fn:(...args:any[])=>any){ipcMain.handle('desk:'+name,(event,...args)=>{if(event.sender!==win.webContents||event.senderFrame!==win.webContents.mainFrame)throw new Error('不允许此页面访问本机数据');return fn(...args)})}
+const run=(id:string)=>{void collector.run(store.get(id)).catch(e=>{diagnostics.event('collector.failed',{taskId:id},e);store.update(id,{status:'failed',message:e.message});change()})}
+function bind(name:string,fn:(...args:any[])=>any){ipcMain.handle('desk:'+name,async(event,...args)=>{
+  if(event.sender!==win.webContents||event.senderFrame!==win.webContents.mainFrame)throw new Error('不允许此页面访问本机数据')
+  const started=Date.now(),quiet=['state','orders','hidePage','setLogging','reportError'].includes(name)
+  if(!quiet)diagnostics.event('ipc.start',{operation:name})
+  try{const result=await fn(...args);if(!quiet)diagnostics.event('ipc.done',{operation:name,durationMs:Date.now()-started});return result}
+  catch(error){if(name!=='reportError')diagnostics.event('ipc.failed',{operation:name,durationMs:Date.now()-started},error);throw error}
+})}
 function target(id:unknown):PlatformId{return platformById(String(id)).id}
 function idle(){if(store.tasks().some(t=>t.status==='running'))throw new Error('请先暂停当前采集任务')}
 async function imageBytes(url:string):Promise<Buffer>{
@@ -28,12 +35,26 @@ async function imageBytes(url:string):Promise<Buffer>{
   const resized=image.resize({width:160}).toPNG();await writeFile(file,resized);return resized
 }
 app.whenReady().then(async()=>{
+  diagnostics=new Diagnostics(app.getPath('userData'),app.getVersion())
   await mkdir(app.getPath('userData'),{recursive:true});store=new Store(join(app.getPath('userData'),'orders.sqlite'))
+  if(store.setting('loggingEnabled')==='true')try{diagnostics.setEnabled(true)}catch{/* The settings screen exposes log storage failures. */}
+  diagnostics.event('app.start',{version:app.getVersion()})
   Menu.setApplicationMenu(null)
   win=new BrowserWindow({width:1320,height:870,minWidth:1120,minHeight:740,show:false,title:'买家订单导出台',backgroundColor:'#f6f7f9',webPreferences:{preload:join(root,'../preload/index.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}})
   win.webContents.setWindowOpenHandler(()=>({action:'deny'}));win.webContents.on('will-navigate',e=>e.preventDefault())
-  collector=new Collector(win,store,change);proxy=new OrderProxy(join(app.getPath('userData'),'proxy-ca'),(p,b)=>collector.accept(p,b))
-  bind('state',()=>({platforms,tasks:store.tasks(),outputDir:store.setting('outputDir'),version:app.getVersion(),proxy:{running:proxy.running,port:proxy.port,certificate:proxy.certificate}}))
+  win.webContents.on('render-process-gone',(_e,d)=>diagnostics.event('renderer.gone',{reason:d.reason,exitCode:d.exitCode},undefined,'error'))
+  win.webContents.on('preload-error',(_e,_path,error)=>diagnostics.event('renderer.preload_failed',{},error))
+  collector=new Collector(win,store,change,diagnostics);proxy=new OrderProxy(join(app.getPath('userData'),'proxy-ca'),(p,b)=>collector.accept(p,b),diagnostics)
+  bind('state',()=>({platforms,tasks:store.tasks(),outputDir:store.setting('outputDir'),version:app.getVersion(),logging:diagnostics.state(),proxy:{running:proxy.running,port:proxy.port,certificate:proxy.certificate}}))
+  bind('setLogging',(enabled:unknown)=>{
+    if(typeof enabled!=='boolean')throw new Error('日志开关参数无效')
+    const previous=diagnostics.state().enabled
+    try{diagnostics.setEnabled(enabled);store.setting('loggingEnabled',String(enabled))}
+    catch(error){if(diagnostics.state().enabled!==previous)try{diagnostics.setEnabled(previous)}catch{};throw error}
+    finally{change()}
+  })
+  bind('openLogs',async()=>{await mkdir(diagnostics.directory,{recursive:true});if(await shell.openPath(diagnostics.state().directory))throw new Error('无法打开日志文件夹，请在资源管理器中打开设置页显示的路径')})
+  bind('reportError',(origin:unknown,error:unknown)=>{if(['window','promise','vue'].includes(String(origin)))diagnostics.event('renderer.error',{origin},error)})
   bind('orders',(id:string)=>store.orders(id))
   bind('login',async(id:PlatformId)=>{await collector.show(target(id))})
   bind('hidePage',()=>collector.hide())
@@ -45,8 +66,8 @@ app.whenReady().then(async()=>{
   bind('chooseDirectory',async()=>{collector.hide();const result=await dialog.showOpenDialog(win,{title:'选择订单导出目录',properties:['openDirectory','createDirectory'],defaultPath:store.setting('outputDir')||app.getPath('documents')});if(result.canceled)return store.setting('outputDir');store.setting('outputDir',result.filePaths[0]);change();return result.filePaths[0]})
   bind('export',async(input:ExportInput)=>{
     if(exporting)throw new Error('正在生成文件，请等待本次导出结束');if(!['xlsx','csv'].includes(input.format))throw new Error('不支持的文件格式')
-    const directory=store.setting('outputDir');if(!directory)throw new Error('请先选择保存目录');exporting=true
-    try{const result=await exportOrders(store.get(input.taskId),store.orders(input.taskId),directory,input.format,!!input.images,imageBytes);store.update(input.taskId,{exportedPath:result.path});change();return result}finally{exporting=false}
+    const directory=store.setting('outputDir');if(!directory)throw new Error('请先选择保存目录');const task=store.get(input.taskId),started=Date.now();exporting=true
+    try{const result=await exportOrders(task,store.orders(input.taskId),directory,input.format,!!input.images,async url=>{try{return await imageBytes(url)}catch(error){diagnostics.event('export.image_failed',{platform:task.platform,taskId:task.id},error,'warn');throw error}});store.update(input.taskId,{exportedPath:result.path});diagnostics.event('export.done',{platform:task.platform,taskId:task.id,format:input.format,images:!!input.images,count:result.count,missing:result.missing,durationMs:Date.now()-started});change();return result}finally{exporting=false}
   })
   bind('openOutput',async()=>{const dir=store.setting('outputDir');if(dir)await shell.openPath(dir)})
   bind('openExport',(id:string)=>{const path=store.get(id).exportedPath;const dir=store.setting('outputDir');if(path&&dir&&resolve(path).startsWith(resolve(dir)+sep))shell.showItemInFolder(path)})
@@ -59,6 +80,8 @@ app.whenReady().then(async()=>{
   if(process.env.ELECTRON_RENDERER_URL)await win.loadURL(process.env.ELECTRON_RENDERER_URL);else await win.loadFile(join(root,'../renderer/index.html'))
   win.show()
   if(process.env.ORDERDESK_SCREENSHOT){setTimeout(async()=>{await writeFile(process.env.ORDERDESK_SCREENSHOT!,(await win.webContents.capturePage()).toPNG())},2000)}
-}).catch(error=>{dialog.showErrorBox('订单导出台启动失败',error instanceof Error?error.message:'无法初始化本机数据');app.quit()})
+}).catch(error=>{diagnostics?.event('app.start_failed',{},error);dialog.showErrorBox('订单导出台启动失败',error instanceof Error?error.message:'无法初始化本机数据');app.quit()})
+process.on('unhandledRejection',error=>diagnostics?.event('app.unhandled_rejection',{},error))
+process.on('uncaughtExceptionMonitor',error=>diagnostics?.event('app.uncaught_exception',{},error))
 app.on('window-all-closed',()=>app.quit())
-app.on('before-quit',()=>{proxy?.stop();collector?.dispose();store?.close()})
+app.on('before-quit',()=>{proxy?.stop();collector?.dispose();diagnostics?.event('app.exit');store?.close()})
