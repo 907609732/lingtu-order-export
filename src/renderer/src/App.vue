@@ -1,0 +1,74 @@
+<script setup lang="ts">
+import { computed,onMounted,onUnmounted,ref } from 'vue'
+import type { AppState,Order,PlatformId,Task } from '../../shared/types'
+const desk = window.desk
+const state=ref<AppState|null>(null), selected=ref<PlatformId>('taobao'), taskId=ref(''), records=ref<Order[]>([])
+const today=new Date(Date.now()+8*3600000).toISOString().slice(0,10)
+const from=ref(today.slice(0,7)+'-01'),to=ref(today),format=ref<'xlsx'|'csv'>('xlsx'),images=ref(true),busy=ref(false),pageOpen=ref(false),section=ref<'export'|'history'|'settings'>('export'),query=ref(''),page=ref(1),notice=ref(''),error=ref(false)
+const platform=computed(()=>state.value?.platforms.find(p=>p.id===selected.value))
+const tasks=computed(()=>state.value?.tasks.filter(t=>t.platform===selected.value)||[])
+const task=computed(()=>state.value?.tasks.find(t=>t.id===taskId.value))
+const filtered=computed(()=>records.value.filter(o=>(o.id+' '+o.shop+' '+o.items.map(i=>i.title).join(' ')).includes(query.value)))
+const shown=computed(()=>filtered.value.slice((page.value-1)*30,page.value*30))
+const missing=computed(()=>records.value.filter(o=>o.missing.length).length)
+const labels:Record<string,string>={running:'正在采集',paused:'已暂停',needs_login:'需要登录 / 验证',partial:'已有结果 · 待核对',completed:'读取完成',failed:'需要处理'}
+let off:(()=>void)|undefined;let refreshPending=false
+async function refresh(){state.value=await desk.state();if(taskId.value)records.value=await desk.orders(taskId.value)}
+async function action(fn:()=>Promise<unknown>,message=''){busy.value=true;notice.value='';error.value=false;try{await fn();if(message)notice.value=message;await refresh()}catch(e){notice.value=String(e instanceof Error?e.message:e).replace(/^Error invoking remote method '[^']+': Error: /,'');error.value=true}finally{busy.value=false}}
+async function selectPlatform(id:PlatformId){if(state.value?.tasks.some(t=>t.status==='running'&&t.platform!==id)){notice.value='请先暂停当前平台的采集任务，再切换平台';error.value=true;return}await desk.hidePage();pageOpen.value=false;selected.value=id;section.value='export';taskId.value=state.value?.tasks.find(t=>t.platform===id)?.id||'';query.value='';page.value=1;records.value=taskId.value?await desk.orders(taskId.value):[]}
+async function openPage(){await action(async()=>{await desk.login(selected.value);pageOpen.value=true})}
+async function hidePage(){await desk.hidePage();pageOpen.value=false}
+async function start(){await action(async()=>{const t=await desk.start({platform:selected.value,from:from.value,to:to.value});taskId.value=t.id;page.value=1})}
+async function exportFile(){await action(async()=>{if(!state.value?.outputDir){await hidePage();await desk.chooseDirectory()};const r=await desk.export({taskId:taskId.value,format:format.value,images:images.value});notice.value=`已导出 ${r.count} 笔订单${r.missing?`，附 ${r.missing} 项核对说明`:''}。文件已保存到所选目录。`})}
+async function choose(){await hidePage();await action(()=>desk.chooseDirectory())}
+async function navigate(s:'export'|'history'|'settings'){await hidePage();section.value=s}
+async function openTask(t:Task){selected.value=t.platform;taskId.value=t.id;from.value=t.from;to.value=t.to;section.value='export';page.value=1;await refresh()}
+onMounted(async()=>{await action(refresh);off=desk.onChange(()=>{if(refreshPending)return;refreshPending=true;setTimeout(()=>{refreshPending=false;void refresh()},250)})})
+onUnmounted(()=>off?.())
+</script>
+
+<template>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand"><div class="brand-symbol">▤</div><div><strong>订单导出台</strong><span>你的订单，集中导出</span></div></div>
+      <div class="nav-label">购物平台 <span>{{ state?.platforms.length || 9 }}</span></div>
+      <nav><button v-for="p in state?.platforms" :key="p.id" class="platform" :class="{ selected:p.id===selected && section==='export' }" @click="selectPlatform(p.id)"><i :style="{color:p.color,background:p.color+'13'}">{{p.icon}}</i><span>{{p.name}}</span><b v-if="p.id===selected && section==='export'">›</b></button></nav>
+      <div class="side-bottom"><button :class="{active:section==='history'}" @click="navigate('history')">◷ <span>导出任务</span><small>{{state?.tasks.length||0}}</small></button><button :class="{active:section==='settings'}" @click="navigate('settings')">⚙ <span>保存与设置</span></button><div class="local-badge"><span class="dot"></span> 数据保存在这台电脑</div></div>
+    </aside>
+    <main>
+      <header class="topbar"><div class="breadcrumb">个人工作台 <span>/</span> {{section==='history'?'导出任务':section==='settings'?'保存与设置':platform?.name}}</div><div class="version">本机版 <span>v{{state?.version||'0.1.0'}}</span></div></header>
+      <div class="content">
+        <div v-if="notice" class="notice" :class="{error}">{{notice}}<button @click="notice=''">×</button></div>
+        <template v-if="section==='export'">
+          <div class="page-title"><div><div class="eyebrow">ORDER EXPORT</div><h1>{{platform?.name}}订单导出</h1><p>选择日期，读取买家订单，再保存到你的电脑。</p></div><button class="secondary" @click="pageOpen?hidePage():openPage()" :disabled="busy">{{pageOpen?'返回导出台':platform?.mode==='proxy'?'打开平台页面':'登录 / 查看平台页'}}</button></div>
+          <div v-if="pageOpen" class="browser-placeholder"><p>请在下方的官方平台页面完成登录。完成后点击右上角“返回导出台”。</p></div>
+          <template v-else>
+            <div class="steps"><div class="step"><b>1</b><span>登录平台</span></div><i></i><div class="step"><b>2</b><span>选择日期并采集</span></div><i></i><div class="step"><b>3</b><span>导出文件</span></div></div>
+            <section v-if="platform?.mode==='proxy'" class="proxy-guide">
+              <div><strong>微信小程序辅助采集</strong><span class="tag">{{state?.proxy.running?'监听已开启':'需要首次设置'}}</span><p>沿用综合版的本机采集方式。开启后在微信中打开对应平台的买家订单列表，已读取的订单会出现在这里。</p></div>
+              <div class="button-row"><button class="secondary" :disabled="busy" @click="action(()=>desk.proxyStart(selected),'本机监听已开启，地址 127.0.0.1:17869。请完成下方证书与代理设置。')">开启辅助采集</button><button class="text-button" :disabled="!state?.proxy.running" @click="action(()=>desk.certificate())">打开本机证书</button><button class="text-button" @click="action(()=>desk.proxySettings())">打开代理设置</button></div>
+              <details><summary>首次设置步骤与停止方式</summary><ol><li>开启辅助采集后，打开证书，在 Windows 中手动将其导入当前用户的受信任根证书。仅用于本机采集。</li><li>记下原来的代理设置，将手动代理临时设为 <code>127.0.0.1:17869</code>。当前程序尚不自动改动系统设置。</li><li>点击下方“开始采集”，再打开对应微信小程序的订单列表并向下翻页。</li><li>结束后先恢复原来的系统代理设置，再停止辅助采集或退出软件。</li></ol><button class="text-button" @click="action(()=>desk.proxyStop(),'本机监听已停止，请确认系统代理已恢复。')">停止辅助采集</button></details>
+            </section>
+            <section class="config-card">
+              <div class="section-head"><h2>导出范围</h2><span>按下单日期 · 全部订单状态</span></div>
+              <div class="form-row"><label>开始日期<input v-model="from" type="date" :max="to"></label><span class="range-dash">—</span><label>结束日期<input v-model="to" type="date" :min="from"></label><div class="quick-date"><button @click="from=today.slice(0,7)+'-01';to=today">本月</button><button @click="from=today.slice(0,4)+'-01-01';to=today">今年</button></div><button class="primary start" :disabled="busy || task?.status==='running'" @click="start">{{task?.status==='running'?'正在采集…':'开始采集'}} <span>→</span></button></div>
+              <div class="config-bottom"><div><label class="inline-label">文件格式<select v-model="format"><option value="xlsx">Excel (.xlsx)</option><option value="csv">CSV (.csv)</option></select></label><label class="checkbox"><input v-model="images" type="checkbox" :disabled="format==='csv'">嵌入商品图片</label></div><button class="text-button" @click="choose">{{state?.outputDir?'更改保存目录':'选择保存目录'}} ↗</button></div>
+              <div v-if="state?.outputDir" class="folder-path" :title="state.outputDir">保存到 {{state.outputDir}} / {{platform?.name}}</div>
+            </section>
+            <section class="results-card">
+              <div class="results-header"><div><h2>采集结果 <span class="count">{{records.length}}</span></h2><p>{{task?`${task.from} 至 ${task.to}`:'采集后，你的订单会显示在这里'}}</p></div><div class="button-row"><button class="secondary" v-if="task && task.status==='running'" @click="action(()=>desk.pause(taskId))">暂停</button><button class="secondary" v-if="task && ['paused','needs_login','failed'].includes(task.status)" @click="action(()=>desk.resume(taskId))">继续采集</button><button class="text-button" v-if="task && task.status==='partial'" @click="action(()=>desk.retry(taskId))">重试采集</button><button class="primary" :disabled="!records.length||busy" @click="exportFile">{{busy?'处理中…':'导出文件'}} ↓</button></div></div>
+              <div v-if="task" class="task-strip" :class="task.status"><span class="dot"></span><strong>{{labels[task.status]}}</strong><span>{{task.message}}</span><button v-if="task.status==='running'" @click="action(()=>desk.finish(taskId))">结束本次读取</button></div>
+              <div v-if="records.length" class="table-tools"><input v-model="query" placeholder="搜索订单号、商品或店铺" @input="page=1"><span>{{missing?`${missing} 笔有待补全字段`:'已读取字段可导出'}}</span></div>
+              <div v-if="!records.length" class="empty-state"><div class="empty-icon"><svg viewBox="0 0 72 72" fill="none"><rect x="15" y="10" width="42" height="52" rx="8" stroke="currentColor" stroke-width="2"/><path d="M26 26h20M26 36h20M26 46h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div><h3>{{task?.status==='running'?'正在等待订单数据':'还没有采集订单'}}</h3><p>{{task?.status==='running'?'首次使用请先完成平台登录，再继续采集。':'先登录你的平台账号，选择日期后点击“开始采集”。'}}</p><div class="empty-note">每个平台独立登录 · 原软件数据保持原样</div></div>
+              <div v-else class="table-wrap"><table><thead><tr><th>商品 / 订单号</th><th>下单时间</th><th>店铺</th><th class="amount">实付款</th><th>订单状态</th></tr></thead><tbody><tr v-for="o in shown" :key="o.id"><td><div class="product-cell"><div class="thumbnail">{{platform?.icon}}</div><div><strong :title="o.items.map(i=>i.title).join('；')">{{o.items.map(i=>i.title).join('；')||'商品信息待补全'}}</strong><span>{{o.id}} <small v-if="o.items.length>1">· {{o.items.length}} 件商品</small></span></div></div></td><td>{{o.createdAt}}</td><td>{{o.shop||'—'}}</td><td class="amount">{{o.paidFen===null?'—':'¥ '+(o.paidFen/100).toFixed(2)}}</td><td><span class="order-status">{{o.status||'待补全'}}</span></td></tr></tbody></table></div>
+              <div v-if="records.length" class="table-footer"><span>共 {{filtered.length}} 笔订单 · 每页 30 笔</span><div><button :disabled="page===1" @click="page--">‹</button><span>{{page}} / {{Math.max(1,Math.ceil(filtered.length/30))}}</span><button :disabled="page*30>=filtered.length" @click="page++">›</button></div></div>
+            </section>
+            <div class="bottom-note">采集结果仅保存在本机，可随时重新导出。平台尚需逐一完成真实订单验收。</div>
+          </template>
+        </template>
+        <template v-else-if="section==='history'"><div class="page-title"><div><div class="eyebrow">EXPORT HISTORY</div><h1>导出任务</h1><p>保留每次采集的结果，方便继续读取和重新导出。</p></div></div><section class="results-card"><div v-if="!state?.tasks.length" class="empty-state"><h3>暂无导出任务</h3><p>选择左侧平台开始第一次采集。</p></div><button v-for="t in state?.tasks" :key="t.id" class="history-row" @click="openTask(t)"><div><strong>{{state?.platforms.find(p=>p.id===t.platform)?.name}}</strong><span>{{t.from}} 至 {{t.to}}</span></div><span>{{t.count}} 笔</span><span class="tag">{{labels[t.status]}}</span><b>查看 →</b></button></section></template>
+        <template v-else><div class="page-title"><div><div class="eyebrow">PREFERENCES</div><h1>保存与设置</h1><p>简单设置，方便下次继续使用。</p></div></div><section class="settings-card"><h2>导出文件夹</h2><p class="path">{{state?.outputDir||'还未选择，首次导出前设置即可'}}</p><div class="button-row"><button class="primary" @click="choose">选择文件夹</button><button class="secondary" :disabled="!state?.outputDir" @click="action(()=>desk.openOutput())">打开文件夹</button></div></section><section class="settings-card"><h2>本机采集数据</h2><p>任务和订单持续保存在这台电脑。清理不会删除你已经导出的文件。</p><div class="button-row"><select v-model="selected"><option v-for="p in state?.platforms" :value="p.id">{{p.name}}</option></select><button class="secondary danger" @click="action(()=>desk.clear(selected),'已完成清理操作')">清理所选平台缓存</button></div></section><section class="settings-card"><h2>当前验证状态</h2><p>开发验证版。程序安装、样例解析和文件生成，与真实平台采集验收分别记录。请先使用短日期范围核对订单。</p></section></template>
+      </div>
+    </main>
+  </div>
+</template>

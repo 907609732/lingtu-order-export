@@ -1,0 +1,66 @@
+{
+  "name": "order-export-desk",
+  "version": "0.1.1",
+  "description": "本机多平台买家订单导出",
+  "author": "Local Order Desk",
+  "private": true,
+  "type": "module",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "vue-tsc --noEmit && electron-vite build",
+    "start": "electron-vite preview",
+    "test": "vitest run",
+    "dist": "npm run build && electron-builder --win nsis --x64",
+    "check": "npm run test && npm run build"
+  },
+  "dependencies": {
+    "exceljs": "4.4.0",
+    "http-mitm-proxy": "^1.1.0",
+    "json-bigint": "^1.0.0",
+    "vue": "3.5.44"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.0",
+    "@types/json-bigint": "^1.0.4",
+    "@types/node": "^24.0.0",
+    "@vitejs/plugin-vue": "^6.0.0",
+    "electron": "44.7.0",
+    "electron-builder": "26.15.3",
+    "electron-vite": "5.0.0",
+    "typescript": "^5.9.0",
+    "vite": "^7.0.0",
+    "vitest": "^5.0.4",
+    "vue-tsc": "^3.0.0"
+  },
+  "build": {
+    "electronDist": "node_modules/electron/dist",
+    "appId": "local.orderexport.desk",
+    "productName": "买家订单导出台",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "artifactName": "OrderExportDesk-${version}-Setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "买家订单导出台",
+      "deleteAppDataOnUninstall": false
+    }
+  },
+  "overrides": {
+    "uuid": "11.1.1"
+  }
+}
