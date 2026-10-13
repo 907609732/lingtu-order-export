@@ -55,7 +55,7 @@ try{
   await page.getByRole('button',{name:'回到最新'}).click();await expect(page.getByLabel('自动滚动')).toBeChecked()
   await page.screenshot({path:join(root,'live-complete.png')})
   // A real backend failure reaches the visible feed, still with file logging off.
-  await app.evaluate(async({webContents})=>{const platform=webContents.getAllWebContents().find(w=>w.getURL().startsWith('https://'));await platform.executeJavaScript("window.lib.mtop.request=async()=>{throw new Error('请登录 PRIVATE_TOKEN')}; void 0")})
+  await app.evaluate(async({webContents})=>{const platform=webContents.getAllWebContents().find(w=>w.getURL().startsWith('https://'));await platform.executeJavaScript("window.lib.mtop.request=async()=>{throw {ret:['FAIL_SYS_SESSION_EXPIRED::PRIVATE_TOKEN']}}; void 0")})
   await page.getByRole('button',{name:'开始采集'}).click()
   await expect(live).toContainText('采集暂时中断')
   await expect(live).toContainText('需要登录或完成平台验证')

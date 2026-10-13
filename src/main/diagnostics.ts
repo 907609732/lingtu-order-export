@@ -3,6 +3,7 @@ import { closeSync, mkdirSync, openSync, realpathSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type { LoggingState } from '../shared/types'
+import { CollectionError, collectionFailureText, mtopFailure } from './collection-errors'
 
 // electron-log's shared file registry uses its default console for I/O failures.
 // Keep those raw errors (which may include a local username) out of console output too.
@@ -42,6 +43,7 @@ export function safeContext(context:Record<string,unknown>):Record<string,unknow
   for (const [key,values] of Object.entries(enums)) if (typeof context[key]==='string' && values.includes(context[key] as string)) safe[key]=context[key]
   for (const key of counters) if (typeof context[key]==='number' && Number.isFinite(context[key]) && Math.abs(context[key] as number)<=1e9) safe[key]=Math.round(context[key] as number)
   if (typeof context.images==='boolean') safe.images=context.images
+  if (typeof context.interrupted==='boolean') safe.interrupted=context.interrupted
   if (typeof context.taskId==='string' && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(context.taskId)) safe.taskId=context.taskId
   if (typeof context.version==='string' && /^\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(context.version)) safe.version=context.version
   return safe
@@ -51,7 +53,8 @@ export function safeError(error:unknown):Record<string,unknown> {
   try {
     const e=error && typeof error==='object' ? error as Record<string,unknown> : {}
     const message=typeof e.message==='string' ? e.message.slice(0,4000) : typeof error==='string' ? error.slice(0,4000) : ''
-    const category=/登录|验证|login|captcha/i.test(message)?'login_or_verification'
+    const category=error instanceof CollectionError&&Object.hasOwn(collectionFailureText,error.category)?error.category
+      : /登录|验证|login|captcha/i.test(message)?'login_or_verification'
       : /timeout|timed out|超时/i.test(message)?'timeout'
       : /ENOSPC|disk.*full|磁盘/i.test(message)?'disk'
       : /EACCES|EPERM|permission/i.test(message)?'permission'
@@ -59,6 +62,7 @@ export function safeError(error:unknown):Record<string,unknown> {
       : /结构|解析|JSON|重复页面|列表未返回/i.test(message)?'response_structure'
       : /目录|文件格式|日期|任务|platform|平台不存在/i.test(message)?'input_or_state' : 'other'
     const safe:Record<string,unknown>={name:typeof e.name==='string'&&errorNames.has(e.name)?e.name:'Error',category}
+    if(error instanceof CollectionError&&error.platformCode)safe.platformCode=mtopFailure({ret:[error.platformCode]}).code
     if (typeof e.code==='string'&&errorCodes.has(e.code)) safe.code=e.code
     // Retain only bundled code locations, without stack messages, local usernames or URLs.
     const stack=typeof e.stack==='string'?e.stack.slice(0,12000):''

@@ -1,7 +1,9 @@
 import type { ExecutionEntry,PlatformId } from '../shared/types'
 import type { DiagnosticListener } from './diagnostics'
+import { collectionFailureText } from './collection-errors'
 
 const failureText:Record<string,string>={
+  ...collectionFailureText,
   login_or_verification:'需要登录或完成平台验证，请打开平台页处理后继续。',
   timeout:'等待超时，请检查网络或平台页面后重试。',network:'网络请求失败，请检查网络连接或平台页面。',
   response_structure:'平台返回的订单结构暂未识别，已有结果已保留。',
@@ -30,7 +32,7 @@ export class ExecutionLog {
   accept:DiagnosticListener=(event,c,error,rawLevel)=>{
     let message='',level:ExecutionEntry['level']=rawLevel==='warn'?'warning':rawLevel==='error'?'error':'info'
     const count=number(c.count),page=number(c.page),received=number(c.received)
-    const reason=failureText[String(error?.category)]||failureText.other
+    const reason=(failureText[String(error?.category)]||failureText.other)+(error?.platformCode?`（错误码：${error.platformCode}）`:'')
     switch(event){
       case 'app.start':message='程序已启动，等待操作。';break
       case 'platform.open':message='正在打开官方平台页面，请在页面中完成登录或验证。';break
@@ -46,7 +48,7 @@ export class ExecutionLog {
       case 'collector.parse_failed':message='收到的数据暂时无法解析，等待下一批订单响应。';break
       case 'collector.end':
         if(c.status==='completed'){message=`采集完成，共 ${count} 笔订单，可导出文件。`;level='success'}
-        else if(c.status==='partial'){message=`本次列表读取结束，已保留 ${count} 笔；详情或采集范围仍需核对，可先导出。`;level='warning'}
+        else if(c.status==='partial'){message=c.interrupted?`采集已中断，已保留 ${count} 笔。请检查上方错误提示后重试，已有结果可导出。`:`本次列表读取结束，已保留 ${count} 笔；详情或采集范围仍需核对，可先导出。`;level='warning'}
         else if(c.status==='needs_login'){message=`任务等待处理，已保留 ${count} 笔。请按上方提示处理后继续采集。`;level='warning'}
         else if(c.status==='failed'){message=`采集失败，已保留 ${count} 笔，请检查错误提示。`;level='error'}
         break

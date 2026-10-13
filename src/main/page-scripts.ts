@@ -1,4 +1,5 @@
-// This function is serialized into a sandboxed official platform page. No Node APIs.
+import { mtopFailure } from './collection-errors'
+// These functions are serialized into a sandboxed official platform page. No Node APIs.
 export function readOrderPage(platform:string):any {
   const visible=(el:Element)=>!!(el as HTMLElement).offsetParent
   const body=document.body?.innerText||''
@@ -28,16 +29,30 @@ export function advanceOrderPage():string {
   for(const el of scrollable)el.scrollTop=el.scrollHeight
   window.scrollTo(0,document.body.scrollHeight);return 'scroll'
 }
-export function mtopRequest(api:string,data:any,platform='xianyu'):Promise<any>{
-  return new Promise((resolve,reject)=>{
-    const w=window as any;const mtop=w.lib?.mtop||w.mtop
-    if(!mtop?.request){reject(new Error('平台页面尚未准备好，请完成登录后重试'));return}
-    const timer=setTimeout(()=>reject(new Error('平台响应超时')),25000)
-    const done=(v:any)=>{clearTimeout(timer);resolve(v)};const fail=()=>{clearTimeout(timer);reject(new Error('平台要求重新登录、验证或稍后重试'))}
+export async function mtopRequest(api:string,data:any,platform='xianyu',classify=mtopFailure):Promise<any>{
+  const w=window as any
+  const blocked=()=>/登录|安全验证|验证码/.test(document.title)||/login\.taobao\.com|passport\./.test(location.hostname)
+  const failure=(category:string,code?:string)=>({__orderdeskFailure:{category,code}})
+  for(let attempt=0;attempt<32&&!(w.lib?.mtop||w.mtop)?.request;attempt++){
+    if(blocked())return failure('login_or_verification')
+    await new Promise(resolve=>setTimeout(resolve,250))
+  }
+  if(blocked())return failure('login_or_verification')
+  const mtop=w.lib?.mtop||w.mtop
+  if(!mtop?.request)return failure('page_not_ready')
+  return new Promise(resolve=>{
+    let settled=false
+    const finish=(v:any)=>{if(settled)return;settled=true;clearTimeout(timer);resolve(v)}
+    const timer=setTimeout(()=>finish(failure('timeout','TIMEOUT')),25000)
+    const fail=(v:any)=>finish({__orderdeskFailure:classify(v)})
+    const done=(v:any)=>{const ret=Array.isArray(v?.ret)?v.ret:typeof v?.ret==='string'?[v.ret]:[];if(ret.length&&!ret.some((s:unknown)=>typeof s==='string'&&s.split('::')[0]==='SUCCESS'))fail(v);else finish(v)}
     try {
       const options=platform==='xianyu'?{appKey:'34839810',accountSite:'xianyu',needLoginPC:false,sessionOption:'AutoLoginOnly'}:{appKey:'12574478',ecode:1,needLogin:true}
-      const result=mtop.request({api,v:'1.0',data,type:'POST',dataType:'json',timeout:20000,...options},done,fail)
+      // Match the official Windows buyer page's request contract. Without its
+      // client tag/raw response mode, this endpoint returns SERVICE_INNER_FAULT.
+      const buyerOptions=platform==='taobao'?{valueType:'original',ttid:'1@tbwang_windows_1.0.0#pc',preventFallback:true}:{}
+      const result=mtop.request({api,v:'1.0',data,type:'POST',dataType:'json',timeout:20000,...options,...buyerOptions},done,fail)
       if(result?.then)result.then(done,fail)
-    } catch { fail() }
+    } catch(error) { fail(error) }
   })
 }
