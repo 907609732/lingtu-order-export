@@ -23,15 +23,18 @@ export function exportRows(orders:Order[]):Record<string,any>[] {
   return orders.flatMap(o=> (o.items.length?(['eleme','meituan'].includes(o.platform)?o.items.slice(0,1):o.items):[{id:'',title:'',spec:'',quantity:null,unitPriceFen:null,imageUrl:'',productUrl:''} as Item]).map(i=>({...o,...o.extra,...i.extra,itemId:i.id,title:i.title,spec:i.spec,quantity:i.quantity??'',imageUrl:i.imageUrl,embeddedImage:i.imageUrl,productUrl:i.productUrl,unitPrice:yuan(i.unitPriceFen),unitPriceFen:i.unitPriceFen??'',paid:yuan(o.paidFen),freight:yuan(o.freightFen),refund:yuan(o.refundFen),allTitles:o.items.map(i=>i.title+(i.quantity&&i.quantity>1?` x${i.quantity}`:'')).join('\n'),itemCount:o.items.reduce((n,i)=>n+(i.quantity||0),0)||o.items.length})))
 }
 export type ImageLoader=(url:string)=>Promise<Buffer>
-export async function exportOrders(task:Task,orders:Order[],directory:string,format:'xlsx'|'csv',images:boolean,loadImage?:ImageLoader):Promise<{path:string;count:number;missing:number}>{
+export type ExportProgress={phase:'rows'|'images'|'write';current?:number;total?:number}
+export async function exportOrders(task:Task,orders:Order[],directory:string,format:'xlsx'|'csv',images:boolean,loadImage?:ImageLoader,onProgress?:(progress:ExportProgress)=>void):Promise<{path:string;count:number;missing:number}>{
   if(!orders.length)throw new Error('当前任务没有可导出的订单')
   const folder=join(directory,safeFileName(platformById(task.platform).name));await mkdir(folder,{recursive:true})
   const stamp=new Date().toISOString().replace(/[:.]/g,'-'); const path=join(folder,`${safeFileName(platformById(task.platform).name)}_${task.from}_${task.to}_${stamp}.${format}`)
   const columns=columnsFor(task.platform);const rows=exportRows(orders)
+  onProgress?.({phase:'rows',total:rows.length})
   const issues:Record<string,string>[]=[]
   for(const o of orders)for(const field of o.missing)issues.push({订单号:o.id,缺失内容:field,说明:'平台未返回或暂时获取失败'})
   if(task.status!=='completed')issues.push({订单号:'',缺失内容:'采集范围尚未确认完整',说明:task.message||'本文件包含当前已采集的结果'})
   if(format==='csv'){
+    onProgress?.({phase:'write'})
     const data='\uFEFF'+[columns.map(c=>csvCell(c.header)).join(','),...rows.map(r=>columns.map(c=>csvCell(r[c.key])).join(','))].join('\r\n')
     await writeFile(path+'.tmp',data,'utf8');await rename(path+'.tmp',path)
     if(issues.length)await writeFile(path.replace(/\.csv$/,'_缺项清单.csv'),'\uFEFF'+['订单号,缺失内容,说明',...issues.map(i=>Object.values(i).map(csvCell).join(','))].join('\r\n'),'utf8')
@@ -44,8 +47,10 @@ export async function exportOrders(task:Task,orders:Order[],directory:string,for
     for(const c of columns){if(['id','tracking','phone','itemId','sellerId','支付宝交易号'].includes(c.key))sheet.getColumn(c.key).numFmt='@';if(['paid','freight','refund','unitPrice'].includes(c.key))sheet.getColumn(c.key).numFmt='0.00'}
     const imageColumn=columns.findIndex(c=>c.key===(task.platform==='pdd'?'embeddedImage':'imageUrl'));const cache=new Map<string,number|Error>()
     if(images&&loadImage&&imageColumn>=0){
+      const imageTotal=rows.filter(r=>r.imageUrl).length;let imageCurrent=0
       for(let n=0;n<rows.length;n++){
         const url=rows[n].imageUrl;if(!url)continue
+        onProgress?.({phase:'images',current:++imageCurrent,total:imageTotal})
         try{
           let imageId=cache.get(url);if(imageId instanceof Error)throw imageId
           if(imageId===undefined){const b=await loadImage(url);const extension=b[0]===0x89&&b[1]===0x50?'png':b[0]===0xff&&b[1]===0xd8?'jpeg':b.subarray(0,3).toString()==='GIF'?'gif':null;if(!extension)throw new Error('图片格式无法嵌入');imageId=book.addImage({base64:b.toString('base64'),extension});cache.set(url,imageId)}
@@ -55,7 +60,7 @@ export async function exportOrders(task:Task,orders:Order[],directory:string,for
     }
     sheet.eachRow((row,n)=>{if(n>1)row.eachCell(c=>{c.alignment={vertical:'middle',wrapText:true}})})
     if(issues.length){const tab=book.addWorksheet('缺项清单');tab.columns=[{header:'订单号',key:'订单号',width:28},{header:'缺失内容',key:'缺失内容',width:30},{header:'说明',key:'说明',width:65}];tab.addRows(issues);tab.getRow(1).font={bold:true}}
-    await book.xlsx.writeFile(path+'.tmp');await rename(path+'.tmp',path)
+    onProgress?.({phase:'write'});await book.xlsx.writeFile(path+'.tmp');await rename(path+'.tmp',path)
   }
   return{path,count:orders.length,missing:issues.length}
 }

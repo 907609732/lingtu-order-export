@@ -7,6 +7,8 @@ const api:DeskAPI={
   proxyStart:id=>ipcRenderer.invoke('desk:proxyStart',id),proxyStop:()=>ipcRenderer.invoke('desk:proxyStop'),certificate:()=>ipcRenderer.invoke('desk:certificate'),proxySettings:()=>ipcRenderer.invoke('desk:proxySettings'),
   onChange:callback=>{ipcRenderer.on('desk:changed',callback);return()=>{ipcRenderer.removeListener('desk:changed',callback)}},
   setLogging:enabled=>ipcRenderer.invoke('desk:setLogging',enabled),openLogs:()=>ipcRenderer.invoke('desk:openLogs'),
-  reportError:(origin,error)=>ipcRenderer.invoke('desk:reportError',origin,error)
+  reportError:(origin,error)=>ipcRenderer.invoke('desk:reportError',origin,error),
+  executionLogs:platform=>ipcRenderer.invoke('desk:executionLogs',platform),setExecutionLogVisible:visible=>ipcRenderer.invoke('desk:setExecutionLogVisible',visible),
+  onExecutionLog:callback=>{const listener=()=>callback();ipcRenderer.on('desk:executionChanged',listener);return()=>ipcRenderer.removeListener('desk:executionChanged',listener)}
 }
 contextBridge.exposeInMainWorld('desk',api)

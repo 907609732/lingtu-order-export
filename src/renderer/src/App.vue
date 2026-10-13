@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed,onMounted,onUnmounted,ref } from 'vue'
+import { computed,nextTick,onMounted,onUnmounted,ref } from 'vue'
 import type { AppState,Order,PlatformId,Task } from '../../shared/types'
+import ExecutionLog from './ExecutionLog.vue'
 const desk = window.desk
+const executionPanel=ref<InstanceType<typeof ExecutionLog>>()
 const state=ref<AppState|null>(null), selected=ref<PlatformId>('taobao'), taskId=ref(''), records=ref<Order[]>([])
 const today=new Date(Date.now()+8*3600000).toISOString().slice(0,10)
 const from=ref(today.slice(0,7)+'-01'),to=ref(today),format=ref<'xlsx'|'csv'>('xlsx'),images=ref(true),busy=ref(false),pageOpen=ref(false),section=ref<'export'|'history'|'settings'>('export'),query=ref(''),page=ref(1),notice=ref(''),error=ref(false)
@@ -18,10 +20,11 @@ async function action(fn:()=>Promise<unknown>,message=''){busy.value=true;notice
 async function selectPlatform(id:PlatformId){if(state.value?.tasks.some(t=>t.status==='running'&&t.platform!==id)){notice.value='请先暂停当前平台的采集任务，再切换平台';error.value=true;return}await desk.hidePage();pageOpen.value=false;selected.value=id;section.value='export';taskId.value=state.value?.tasks.find(t=>t.platform===id)?.id||'';query.value='';page.value=1;records.value=taskId.value?await desk.orders(taskId.value):[]}
 async function openPage(){await action(async()=>{await desk.login(selected.value);pageOpen.value=true})}
 async function hidePage(){await desk.hidePage();pageOpen.value=false}
-async function start(){await action(async()=>{const t=await desk.start({platform:selected.value,from:from.value,to:to.value});taskId.value=t.id;page.value=1})}
-async function exportFile(){await action(async()=>{if(!state.value?.outputDir){await hidePage();await desk.chooseDirectory()};const r=await desk.export({taskId:taskId.value,format:format.value,images:images.value});notice.value=`已导出 ${r.count} 笔订单${r.missing?`，附 ${r.missing} 项核对说明`:''}。文件已保存到所选目录。`})}
+async function start(){await action(async()=>{const t=await desk.start({platform:selected.value,from:from.value,to:to.value});taskId.value=t.id;page.value=1;await nextTick();executionPanel.value?.reveal()})}
+async function exportFile(){await action(async()=>{if(!state.value?.outputDir){await hidePage();await desk.chooseDirectory()};await nextTick();executionPanel.value?.reveal();const r=await desk.export({taskId:taskId.value,format:format.value,images:images.value});notice.value=`已导出 ${r.count} 笔订单${r.missing?`，附 ${r.missing} 项核对说明`:''}。文件已保存到所选目录。`})}
 async function choose(){await hidePage();await action(()=>desk.chooseDirectory())}
 async function toggleLogging(){const enabled=!state.value?.logging.enabled;await action(()=>desk.setLogging(enabled),enabled?'问题排查日志已开启，复现问题后可打开日志文件夹查看。':'问题排查日志已关闭，已有日志仍保留在本机。')}
+async function toggleExecutionLog(){const visible=!state.value?.showExecutionLog;await action(()=>desk.setExecutionLogVisible(visible),visible?'执行日志已显示，回到采集页面即可查看。':'执行日志面板已隐藏，重启后保留选择。')}
 async function navigate(s:'export'|'history'|'settings'){await hidePage();section.value=s}
 async function openTask(t:Task){selected.value=t.platform;taskId.value=t.id;from.value=t.from;to.value=t.to;section.value='export';page.value=1;await refresh()}
 onMounted(async()=>{await action(refresh);off=desk.onChange(()=>{if(refreshPending)return;refreshPending=true;setTimeout(()=>{refreshPending=false;void refresh()},250)})})
@@ -56,6 +59,7 @@ onUnmounted(()=>off?.())
               <div class="config-bottom"><div><label class="inline-label">文件格式<select v-model="format"><option value="xlsx">Excel (.xlsx)</option><option value="csv">CSV (.csv)</option></select></label><label class="checkbox"><input v-model="images" type="checkbox" :disabled="format==='csv'">嵌入商品图片</label></div><button class="text-button" @click="choose">{{state?.outputDir?'更改保存目录':'选择保存目录'}} ↗</button></div>
               <div v-if="state?.outputDir" class="folder-path" :title="state.outputDir">保存到 {{state.outputDir}} / {{platform?.name}}</div>
             </section>
+            <ExecutionLog v-if="state?.showExecutionLog" ref="executionPanel" :platform="selected" />
             <section class="results-card">
               <div class="results-header"><div><h2>采集结果 <span class="count">{{records.length}}</span></h2><p>{{task?`${task.from} 至 ${task.to}`:'采集后，你的订单会显示在这里'}}</p></div><div class="button-row"><button class="secondary" v-if="task && task.status==='running'" @click="action(()=>desk.pause(taskId))">暂停</button><button class="secondary" v-if="task && ['paused','needs_login','failed'].includes(task.status)" @click="action(()=>desk.resume(taskId))">继续采集</button><button class="text-button" v-if="task && task.status==='partial'" @click="action(()=>desk.retry(taskId))">重试采集</button><button class="primary" :disabled="!records.length||busy" @click="exportFile">{{busy?'处理中…':'导出文件'}} ↓</button></div></div>
               <div v-if="task" class="task-strip" :class="task.status"><span class="dot"></span><strong>{{labels[task.status]}}</strong><span>{{task.message}}</span><button v-if="task.status==='running'" @click="action(()=>desk.finish(taskId))">结束本次读取</button></div>
@@ -70,6 +74,11 @@ onUnmounted(()=>off?.())
         <template v-else-if="section==='history'"><div class="page-title"><div><div class="eyebrow">EXPORT HISTORY</div><h1>导出任务</h1><p>保留每次采集的结果，方便继续读取和重新导出。</p></div></div><section class="results-card"><div v-if="!state?.tasks.length" class="empty-state"><h3>暂无导出任务</h3><p>选择左侧平台开始第一次采集。</p></div><button v-for="t in state?.tasks" :key="t.id" class="history-row" @click="openTask(t)"><div><strong>{{state?.platforms.find(p=>p.id===t.platform)?.name}}</strong><span>{{t.from}} 至 {{t.to}}</span></div><span>{{t.count}} 笔</span><span class="tag">{{labels[t.status]}}</span><b>查看 →</b></button></section></template>
         <template v-else>
           <div class="page-title"><div><div class="eyebrow">PREFERENCES</div><h1>保存与设置</h1><p>简单设置，方便下次继续使用。</p></div></div>
+          <section class="settings-card">
+            <div class="logging-row"><div><h2 id="execution-log-label">显示执行日志</h2><p>{{state?.showExecutionLog?'已显示 · 在采集界面实时查看执行过程':'已隐藏 · 采集界面不显示日志面板'}}，重启后保留选择。</p></div><button role="switch" aria-labelledby="execution-log-label" :aria-checked="!!state?.showExecutionLog" :disabled="busy||!state" class="log-switch" :class="{on:state?.showExecutionLog}" @click="toggleExecutionLog"><span></span></button></div>
+            <p>显示正在执行的步骤、读取页数、订单数量及成功或失败提示。支持自动滚动和复制日志。</p>
+            <p>关闭只隐藏面板；重新打开可查看本次运行的最近记录。需要将日志保存到文件时，开启下方的问题排查日志。</p>
+          </section>
           <section class="settings-card">
             <div class="logging-row"><div><h2 id="logging-label">问题排查日志</h2><p id="logging-description">{{state?.logging.enabled?'已开启 · 正在记录运行过程':'已关闭 · 需要排查问题时开启'}}，重启后保留选择。</p></div><button role="switch" aria-labelledby="logging-label" aria-describedby="logging-description" :aria-checked="!!state?.logging.enabled" :disabled="busy||!state" class="log-switch" :class="{on:state?.logging.enabled}" @click="toggleLogging"><span></span></button></div>
             <p>记录采集进度、导出结果和异常。日志仅存本机，不记录账号、Cookie、收货信息及订单正文。</p>

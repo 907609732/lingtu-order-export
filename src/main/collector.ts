@@ -7,10 +7,13 @@ import { dateText, moneyFen } from '../core/values'
 import { mergeXianyuDetail, normalizePayload, parsePayload } from '../core/normalize'
 import { advanceOrderPage, mtopRequest, readOrderPage } from './page-scripts'
 import type { Diagnostics } from './diagnostics'
+import { ExecutionProgress } from './execution-progress'
 export class Collector {
   views=new Map<PlatformId,WebContentsView>(); current?:WebContentsView; active?:string; stopped=new Set<string>(); runs=new Set<string>(); private captureCount=0; private disposing=false
   constructor(private win:BrowserWindow,private store:Store,private changed:()=>void,private diagnostics:Diagnostics){win.on('resize',()=>this.layout())}
-  private pageRead(task:Task,page:number,received:number){this.diagnostics.event('collector.page',{platform:task.platform,taskId:task.id,page,received,count:this.store.get(task.id).count})}
+  private progress=new Map<string,ExecutionProgress>()
+  private stage(task:Task,context:Record<string,unknown>){this.progress.get(task.id)?.stage(context)}
+  private pageRead(task:Task,page:number,received:number,extra:Record<string,unknown>={}){this.diagnostics.event('collector.page',{platform:task.platform,taskId:task.id,page,received,count:this.store.get(task.id).count,...extra})}
   layout(){if(this.current){const [w,h]=this.win.getContentSize();this.current.setBounds({x:244,y:174,width:Math.max(300,w-268),height:Math.max(200,h-196)})}}
   hide(){if(this.current){this.win.contentView.removeChildView(this.current);this.current=undefined}}
   async show(id:PlatformId):Promise<void>{
@@ -50,13 +53,15 @@ export class Collector {
       this.store.update(task.id,{pages:task.pages+1,message:unknown?`${unknown} 笔订单缺少日期，未混入所选日期范围`:`已读取订单，当前范围内 ${this.store.get(task.id).count} 笔`});if(count||unknown)this.changed()
     }catch(error){this.diagnostics.event('collector.parse_failed',{platform,taskId:task.id},error,'warn')}
   }
-  stop(id:string){this.diagnostics.event('collector.stop',{taskId:id});this.stopped.add(id);if(this.active===id)this.active=undefined}
+  stop(id:string){this.diagnostics.event('collector.stop',{taskId:id});this.progress.get(id)?.close();this.progress.delete(id);this.stopped.add(id);if(this.active===id)this.active=undefined}
   async run(task:Task):Promise<void>{
     if(this.runs.size)throw new Error('上一个采集任务正在结束，请稍后再试')
     this.runs.add(task.id);this.stopped.delete(task.id);this.active=task.id
     const started=Date.now();this.diagnostics.event('collector.start',{platform:task.platform,taskId:task.id,count:task.count,pages:task.pages})
+    this.progress.get(task.id)?.close();this.progress.set(task.id,new ExecutionProgress(this.diagnostics,'collector',{platform:task.platform,taskId:task.id}))
     try{
-      if(platformById(task.platform).mode==='proxy'){this.diagnostics.event('collector.waiting',{platform:task.platform,taskId:task.id});this.store.update(task.id,{message:'正在等待订单页面数据；请在微信小程序打开买家订单列表'});this.changed();return}
+      if(platformById(task.platform).mode==='proxy'){this.stage(task,{phase:'response'});this.diagnostics.event('collector.waiting',{platform:task.platform,taskId:task.id});this.store.update(task.id,{message:'正在等待订单页面数据；请在微信小程序打开买家订单列表'});this.changed();return}
+      this.stage(task,{phase:'platform'})
       const view=await this.ensure(task.platform);if(this.stopped.has(task.id))return
       if(task.platform==='xianyu')await this.runXianyu(task,view)
       else if(task.platform==='alibaba')await this.runAlibaba(task,view)
@@ -64,11 +69,12 @@ export class Collector {
       else if(task.platform==='jd')await this.runJD(task,view)
       else { await view.webContents.loadURL(platformById(task.platform).url);if(!this.stopped.has(task.id))await this.runPage(task,view) }
     }catch(e){this.diagnostics.event('collector.failed',{platform:task.platform,taskId:task.id},e);if(!this.stopped.has(task.id)){this.store.update(task.id,{status:'needs_login',message:e instanceof Error?e.message:'采集暂时失败，请打开平台页检查'});this.changed()}}
-    finally{this.runs.delete(task.id);if(!this.disposing){const latest=this.store.get(task.id);this.diagnostics.event('collector.end',{platform:task.platform,taskId:task.id,status:latest.status,count:latest.count,pages:latest.pages,durationMs:Date.now()-started})}}
+    finally{this.runs.delete(task.id);if(!this.disposing){const latest=this.store.get(task.id);if(platformById(task.platform).mode!=='proxy'||latest.status!=='running'){this.progress.get(task.id)?.close();this.progress.delete(task.id)}this.diagnostics.event('collector.end',{platform:task.platform,taskId:task.id,status:latest.status,count:latest.count,pages:latest.pages,durationMs:Date.now()-started})}}
   }
   async runXianyu(task:Task,view:WebContentsView){
     let cursor:{page:number;offset?:string}={page:1};if(task.cursor)try{cursor=JSON.parse(task.cursor)}catch{}
     for(let page=cursor.page;page<=500&&!this.stopped.has(task.id);page++){
+      this.stage(task,{phase:'page',page})
       const response=await view.webContents.executeJavaScript(`(${mtopRequest.toString()})('mtop.idle.web.trade.bought.list',${JSON.stringify({pageNumber:page,orderStatus:'ALL',...(cursor.offset?{offsetRow:cursor.offset}:{})})})`)
       if(!Array.isArray(response?.data?.items))throw new Error('请打开闲鱼页面完成登录或验证，再点击继续')
       const orders=normalizePayload('xianyu',response);this.store.add(task.id,orders);this.store.update(task.id,{pages:page,message:`正在读取第 ${page} 页`});this.changed()
@@ -82,6 +88,7 @@ export class Collector {
   async runAlibaba(task:Task,view:WebContentsView){
     const pageSize=20
     for(let page=1;page<=1000&&!this.stopped.has(task.id);page++){
+      this.stage(task,{phase:'page',page})
       const data={serviceId:'OrderListDataLineService.buyerOrderList',param:JSON.stringify({startDateTime:task.from+' 00:00:00',endDateTime:task.to+' 23:59:59',page,pageSize})}
       const response=await view.webContents.executeJavaScript(`(${mtopRequest.toString()})('mtop.1688.trading.dataline.service',${JSON.stringify(data)},'alibaba')`)
       const result=response?.data?.data?.result
@@ -103,6 +110,7 @@ export class Collector {
     for(let year=Math.min(Number(task.to.slice(0,4)),currentYear);year>=Number(task.from.slice(0,4))&&!this.stopped.has(task.id);year--){
       let signature=''
       for(let page=1;page<=1000&&!this.stopped.has(task.id);page++){
+        this.stage(task,{phase:'page',page,year})
         const url=new URL(platformById('jd').url);url.searchParams.set('d',year===currentYear?'2':String(year));url.searchParams.set('s','4096');url.searchParams.set('page',String(page))
         await view.webContents.loadURL(url.href);await delay(1200);if(this.stopped.has(task.id))return
         const snap=await view.webContents.executeJavaScript(`(${readOrderPage.toString()})('jd')`)
@@ -112,7 +120,7 @@ export class Collector {
         signature=snap.signature
         const rows:Order[]=snap.rows.map((r:any)=>({...base,...r,createdAt:dateText(r.createdAt),paidFen:moneyFen(r.paid),detailState:'pending',missing:['订单详情']}))
         this.store.add(task.id,rows);this.store.update(task.id,{pages:++pages,cursor:JSON.stringify({year,page}),message:`正在读取京东 ${year} 年第 ${page} 页`});this.changed()
-        this.pageRead(task,pages,rows.length)
+        this.pageRead(task,page,rows.length,{year})
         if(!snap.hasNext||snap.empty)break
         if(page===1000)throw new Error('京东本年度达到分页上限，已有结果已保留')
       }
@@ -121,6 +129,7 @@ export class Collector {
   }
   async runTaobao(task:Task,view:WebContentsView){
     for(let page=1;page<=1000&&!this.stopped.has(task.id);page++){
+      this.stage(task,{phase:'page',page})
       const data={tabCode:'all',page,OrderType:'OrderList',appName:'tborder',appVersion:'3.0',condition:JSON.stringify({directRouteToTm2Scene:'1'}),__needlessClearProtocol__:true}
       const response=await view.webContents.executeJavaScript(`(${mtopRequest.toString()})('mtop.taobao.order.queryboughtlistV2',${JSON.stringify(data)},'taobao')`)
       const nodes=response?.data?.data,pagination=nodes?.pagination?.fields,control=response?.data?.global?.pageControl
@@ -140,14 +149,17 @@ export class Collector {
   async xianyuDetails(task:Task,view:WebContentsView){
     const all=this.store.orders(task.id)
     for(let i=0;i<all.length&&!this.stopped.has(task.id);i++){
+      this.stage(task,{phase:'detail',current:i+1,total:all.length})
       let order=all[i]
       try{const response=await view.webContents.executeJavaScript(`(${mtopRequest.toString()})('mtop.idle.web.trade.order.detail',${JSON.stringify({tid:order.id})})`);order=mergeXianyuDetail(order,response)}catch(error){this.diagnostics.event('collector.detail_failed',{platform:task.platform,taskId:task.id},error,'warn');order={...order,missing:[...order.missing,'订单详情']}}
       this.store.add(task.id,[order]);this.store.update(task.id,{message:`正在补全订单详情 ${i+1} / ${all.length}`});this.changed();await delay(900)
+      this.diagnostics.event('collector.detail',{platform:task.platform,taskId:task.id,current:i+1,total:all.length})
     }
   }
   async runPage(task:Task,view:WebContentsView){
     let stagnant=0,lastSignature='',lastCapture=-1
     for(let page=0;page<600&&!this.stopped.has(task.id);page++){
+      this.stage(task,{phase:'page',page:page+1})
       await delay(page===0?2000:1800);if(this.stopped.has(task.id))return
       const snap=await view.webContents.executeJavaScript(`(${readOrderPage.toString()})(${JSON.stringify(task.platform)})`)
       if(snap.blocked)throw new Error(snap.message)
@@ -162,5 +174,5 @@ export class Collector {
       await view.webContents.executeJavaScript(`(${advanceOrderPage.toString()})()`)
     }
   }
-  dispose(){this.disposing=true;for(const t of this.store.tasks())if(t.status==='running')this.stop(t.id);for(const v of this.views.values())if(!v.webContents.isDestroyed())v.webContents.close();this.views.clear()}
+  dispose(){this.disposing=true;for(const p of this.progress.values())p.close();this.progress.clear();for(const t of this.store.tasks())if(t.status==='running')this.stop(t.id);for(const v of this.views.values())if(!v.webContents.isDestroyed())v.webContents.close();this.views.clear()}
 }

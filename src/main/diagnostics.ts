@@ -15,18 +15,22 @@ const events = new Set([
   'platform.debugger_failed','platform.response_failed','platform.gone',
   'collector.start','collector.waiting','collector.response','collector.parse_failed',
   'collector.page','collector.detail_failed','collector.failed','collector.end','collector.stop',
-  'export.done','export.image_failed','proxy.start','proxy.stop','proxy.error'
+  'export.done','export.image_failed','proxy.start','proxy.stop','proxy.error',
+  'collector.stage','collector.wait','collector.detail','task.action','platform.open',
+  'export.start','export.progress','export.wait'
 ] as const)
 type Event = typeof events extends Set<infer T> ? T : never
 type Level = 'info' | 'warn' | 'error'
+export type DiagnosticListener = (event: string, context: Record<string,unknown>, error: Record<string,unknown>|undefined, level: Level) => void
 const enums:Record<string,readonly string[]> = {
   platform:['taobao','alibaba','pdd','jd','xianyu','dewu','kuaishou','eleme','meituan'],
   operation:['state','orders','hidePage','setLogging','login','start','pause','resume','retry','finish','chooseDirectory','export','openOutput','openExport','clear','proxyStart','proxyStop','certificate','proxySettings','openLogs'],
   status:['running','paused','needs_login','partial','completed','failed'],
   format:['xlsx','csv'],origin:['window','promise','vue'],
+  phase:['platform','page','detail','rows','images','write','response'],action:['pause','resume','retry','finish'],
   reason:['clean-exit','abnormal-exit','killed','crashed','oom','launch-failed','integrity-failure','memory-eviction']
 }
-const counters = new Set(['count','pages','page','received','missing','unknown','durationMs','exitCode','networkCode'])
+const counters = new Set(['count','pages','page','received','missing','unknown','durationMs','exitCode','networkCode','current','total','seconds','year'])
 const errorNames = new Set(['Error','TypeError','RangeError','SyntaxError','ReferenceError','URIError','EvalError','AggregateError','AbortError','TimeoutError'])
 const errorCodes = new Set(['ENOENT','EACCES','EPERM','ENOSPC','EIO','EBUSY','EEXIST','EADDRINUSE','ECONNRESET','ECONNREFUSED','ETIMEDOUT','ENOTFOUND','ERR_NETWORK','ERR_ABORTED','SQLITE_BUSY','SQLITE_ERROR'])
 const writeFailure = '日志写入失败，请检查磁盘空间和文件夹权限，再重新开启日志。'
@@ -71,6 +75,7 @@ export class Diagnostics {
   private enabled=false
   private problem=''
   private listening=false
+  onEvent?:DiagnosticListener
   constructor(userData:string,private version:string,maxBytes=5*1024*1024) {
     this.directory=join(userData,'logs')
     // No console interception, renderer bridge or automatic error serialization.
@@ -111,8 +116,12 @@ export class Diagnostics {
     }
   }
   event(event:Event,context:Record<string,unknown>={},error?:unknown,level:Level=error===undefined?'info':'error'):void {
-    if (!this.enabled || this.problem || !events.has(event)) return
-    try { this.logger[level](JSON.stringify({event,...safeContext(context),...(error===undefined?{}:{error:safeError(error)})})) }
+    if (!events.has(event)) return
+    const safe=safeContext(context),failure=error===undefined?undefined:safeError(error)
+    // Live progress works independently of file logging and disk availability.
+    try{this.onEvent?.(event,safe,failure,level)}catch{/* A display subscriber must not interrupt work. */}
+    if (!this.enabled || this.problem) return
+    try { this.logger[level](JSON.stringify({event,...safe,...(failure===undefined?{}:{error:failure})})) }
     catch { this.problem=writeFailure }
   }
 }
