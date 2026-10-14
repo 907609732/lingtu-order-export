@@ -74,11 +74,26 @@ function taobaoComponents(payload:any):Order[]|null {
     ?structure.orderContainer.filter((key:unknown)=>typeof key==='string'&&key.startsWith('shopOrderContainer_')).map((key:string)=>{const members=descendants(key);return{node:members.find(v=>v?.tag==='shopInfo'),members}}).filter((g:any)=>g.node)
     :all.filter(v=>v?.tag==='shopInfo').map(node=>({node,members:all}))
   const absolute=(value:string)=>value.replace(/^\/\//,'https://')
+  const webUrl=(value:string)=>{try{const url=new URL(absolute(value));return ['http:','https:'].includes(url.protocol)&&!url.username&&!url.password?url.href:''}catch{return ''}}
+  const booleanLabel=(value:unknown)=>value===true||value==='true'?'是':value===false||value==='false'?'否':''
+  const afterSaleOperation=(node:any)=>{
+    const operations=Array.isArray(node.fields?.suborderop?.values)?node.fields.suborderop.values:[]
+    for(const operation of operations){
+      const label=s(operation,'name');if(!/售后|退款|退货/.test(label))continue
+      const eventList=node.events?.[operation.event],event=Array.isArray(eventList)?eventList[0]?.fields:{}
+      const url=webUrl(s(event,'url','successUrl')||s(operation,'eventData.params.url','eventData.openUrlUtArgs.url','eventData.successUrl'))
+      if(url)return {'售后入口':url,'售后操作':label==='退款成功'?'查看退款':label}
+    }
+    return {'售后入口':'','售后操作':''}
+  }
   return groups.map(({node,members})=>{
     const raw=node.fields||{},id=s(raw,'orderId')||s(node,'id'),o=base('taobao',{...raw,orderId:id})
     const payment=members.find(v=>v.tag==='orderPayment'&&(scopedHierarchy||s(v,'id')===id))?.fields||{}
     o.createdAt=dateText(pick(raw,'createTime','createDay'));o.status=s(raw,'tradeTitle');o.shop=s(raw,'shopName','sellerName');o.sellerId=s(raw,'sellerId');o.detailUrl=absolute(s(raw,'orderDetailUrl'));o.paidFen=moneyFen(pick(payment,'actualFee.value'));o.freightFen=moneyFen(pick(payment,'pcPostFee.value'))
     if(!o.sellerId)try{o.sellerId=new URL(absolute(s(raw,'outUrl'))).searchParams.get('user_number_id')||''}catch{}
+    const memoFlag=typeof raw.memoFlag==='number'||typeof raw.memoFlag==='string'&&raw.memoFlag.trim()!==''?Number(raw.memoFlag):NaN
+    const buyerMessage=booleanLabel(payment.hasBuyerMessage)
+    o.extra={'店铺链接':webUrl(s(raw,'outUrl')),'卖家昵称':s(raw,'sellerName'),'信用卡付款':booleanLabel(payment.isXCardOrder),'存在买家备注':memoFlag>0||buyerMessage==='是'?'是':memoFlag===0||buyerMessage==='否'?'否':''}
     o.items=members.filter(v=>v.tag==='orderItemInfo'&&s(v,'fields.orderId')===id).map((v,index)=>{
       const raw=v.fields.item||{},nodeId=s(v,'id'),prefix=id+'_',subOrderId=nodeId.startsWith(prefix)?nodeId.slice(prefix.length):'',productId=s(raw,'itemId')
       const amount=typeof raw.quantity==='string'||typeof raw.quantity==='number'?Number(raw.quantity):NaN
@@ -86,8 +101,9 @@ function taobaoComponents(payload:any):Order[]|null {
       const sku=Array.isArray(raw.skuInfo)?raw.skuInfo.map((p:any)=>[s(p,'skuKey'),s(p,'skuValue','skuText')].filter(Boolean).join(':')).filter(Boolean).join('; '):''
       // actualTotalFee is the sub-order total, not a unit price. Preserve its
       // exact cents separately; do not invent a rounded price for multiple units.
-      return {...item(raw,index,'yuan'),id:subOrderId||nodeId||productId||String(index),quantity,spec:sku||s(raw,'skuText'),imageUrl:absolute(s(raw,'pic')),productUrl:absolute(s(raw,'itemUrl','outerUrl')),unitPriceFen:quantity===1?total:null,extra:{'子订单号':subOrderId,'商品ID':productId,'SKU ID':s(raw,'skuId'),'商品实付合计(元)':total===null?'':(total/100).toFixed(2),'商品退款状态':s(raw,'refundStatus')}}
+      return {...item(raw,index,'yuan'),id:subOrderId||nodeId||productId||String(index),quantity,spec:sku||s(raw,'skuText'),imageUrl:absolute(s(raw,'pic')),productUrl:absolute(s(raw,'itemUrl','outerUrl')),unitPriceFen:quantity===1?total:null,extra:{'子订单号':subOrderId,'商品ID':productId,'SKU ID':s(raw,'skuId'),'商品实付合计(元)':total===null?'':(total/100).toFixed(2),'商品退款状态':s(raw,'refundStatus'),'商品售后状态':s(raw,'refundStatus'),...afterSaleOperation(v)}}
     })
+    o.refundStatus=o.refundStatus||[...new Set(o.items.map(i=>i.extra?.['商品售后状态']).filter(Boolean))].join('；')
     o.detailState='pending';o.missing=['订单详情'];if(!o.createdAt)o.missing.push('订单日期');if(o.paidFen===null)o.missing.push('实付款');if(!o.items.some(i=>i.title))o.missing.push('商品信息');return o
   })
 }

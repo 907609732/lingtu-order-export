@@ -37,4 +37,45 @@ describe('淘宝安装包字段合同',()=>{
     expect(o.items[0].spec).toBe('颜色:白色; 尺寸:大');expect(o.items[0].productUrl).toBe('https://item.taobao.com/item.htm?id=88888888888888888888')
     expect(o.detailUrl).toMatch(/^https:/);expect(o.items[1].spec).toBe('黑色')
   })
+  it('保留店铺、卖家和明确的付款备注标识；未知标识不冒充否',()=>{
+    const payload:any=fixture(),nodes=payload.data.data
+    Object.assign(nodes.shop.fields,{sellerName:'卖家测试昵称',memoFlag:0})
+    Object.assign(nodes.pay.fields,{isXCardOrder:'false',hasBuyerMessage:'true'})
+    const o=normalizePayload('taobao',payload)[0]
+    expect(o.extra).toMatchObject({'店铺链接':'https://test.tmall.com/shop/view_shop.htm?user_number_id=98765432109876543210','卖家昵称':'卖家测试昵称','信用卡付款':'否','存在买家备注':'是'})
+    expect(o.remark).toBe('')
+    const unknown=normalizePayload('taobao',fixture())[0]
+    expect(unknown.extra['信用卡付款']).toBe('');expect(unknown.extra['存在买家备注']).toBe('')
+    nodes.shop.fields.memoFlag='';delete nodes.pay.fields.hasBuyerMessage
+    expect(normalizePayload('taobao',payload)[0].extra['存在买家备注']).toBe('')
+  })
+  it('申请售后入口不表示已有售后，退款状态只来自平台字段',()=>{
+    const payload:any=fixture(),nodes=payload.data.data
+    nodes.itemA.fields.suborderop={values:[{name:'申请售后',event:'afterSale'}]}
+    nodes.itemA.events={afterSale:[{fields:{url:'//refund.taobao.com/dispute/apply.htm?bizOrderId='+orderId}}]}
+    nodes.itemB.fields.item.refundStatus='退款成功'
+    nodes.itemB.fields.suborderop={values:[{name:'退款成功',event:'refund'}]}
+    nodes.itemB.events={refund:[{fields:{url:'https://refund.taobao.com/dispute/detail.htm?bizOrderId='+orderId}}]}
+    const o=normalizePayload('taobao',payload)[0]
+    expect(o.items[0].extra?.['商品售后状态']).toBe('')
+    expect(o.items[0].extra?.['售后操作']).toBe('申请售后')
+    expect(o.items[0].extra?.['售后入口']).toBe('https://refund.taobao.com/dispute/apply.htm?bizOrderId='+orderId)
+    expect(o.items[1].extra?.['商品退款状态']).toBe('退款成功')
+    expect(o.items[1].extra?.['商品售后状态']).toBe('退款成功')
+    expect(o.items[1].extra?.['售后操作']).toBe('查看退款')
+    expect(o.refundStatus).toBe('退款成功');expect(o.refundFen).toBeNull()
+  })
+  it('只保留安全网页入口，不把其他订单操作当售后或执行型链接',()=>{
+    const payload:any=fixture(),nodes=payload.data.data
+    nodes.shop.fields.outUrl='javascript:alert(1)'
+    nodes.itemA.fields.suborderop={values:[{name:'再买一单',event:'buy'},{name:'申请售后',event:'bad'},{name:'查看退款',event:'safe',eventData:{params:{url:'//refund.taobao.com/dispute/detail.htm?bizOrderId='+orderId}}}]}
+    nodes.itemA.events={buy:[{fields:{url:'https://item.taobao.com/item.htm'}}],bad:[{fields:{url:'javascript:alert(1)'}}]}
+    nodes.itemB.fields.suborderop={values:[{name:'申请售后',event:'bad'}]}
+    nodes.itemB.events={bad:[{fields:{url:'https://user:password@refund.taobao.com/'}}]}
+    const o=normalizePayload('taobao',payload)[0]
+    expect(o.extra['店铺链接']).toBe('')
+    expect(o.items[0].extra?.['售后入口']).toBe('https://refund.taobao.com/dispute/detail.htm?bizOrderId='+orderId)
+    expect(o.items[1].extra?.['售后入口']).toBe('')
+    expect(o.refundStatus).toBe('')
+  })
 })
