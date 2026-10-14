@@ -1,7 +1,7 @@
 {
-  "name": "order-export-desk",
+  "name": "wucheng-order-export",
   "version": "0.1.6",
-  "description": "本机多平台买家订单导出",
+  "description": "五成电商平台买家订单导出",
   "author": "Local Order Desk",
   "private": true,
   "type": "module",
@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "electron-log": "5.4.4",
+    "element-plus": "2.14.7",
     "exceljs": "4.4.0",
     "http-mitm-proxy": "^1.1.0",
     "json-bigint": "^1.0.0",
@@ -36,8 +37,8 @@
   },
   "build": {
     "electronDist": "node_modules/electron/dist",
-    "appId": "local.orderexport.desk",
-    "productName": "买家订单导出台",
+    "appId": "com.wucheng.order-export",
+    "productName": "五成电商订单导出助手",
     "directories": {
       "output": "release"
     },
@@ -50,14 +51,14 @@
       "target": [
         "nsis"
       ],
-      "artifactName": "OrderExportDesk-${version}-Setup.${ext}"
+      "artifactName": "WuchengOrderExport-${version}-Setup.${ext}"
     },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "shortcutName": "买家订单导出台",
+      "shortcutName": "五成电商订单导出助手",
       "deleteAppDataOnUninstall": false
     }
   },

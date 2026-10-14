@@ -2,6 +2,7 @@ import { app,BrowserWindow,dialog,ipcMain,Menu,shell,nativeImage } from 'electro
 import { dirname,join,resolve,sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { mkdir,readFile,writeFile } from 'node:fs/promises'
+import { cpSync,existsSync,mkdirSync,renameSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { Store } from '../core/store'
 import { exportOrders } from '../core/exporter'
@@ -13,11 +14,18 @@ import { ExecutionLog } from './execution-log'
 import { ExecutionProgress } from './execution-progress'
 import type { ExportInput,PlatformId,StartInput } from '../shared/types'
 const root=dirname(fileURLToPath(import.meta.url))
-app.setName('买家订单导出台')
+// 首次启动时把旧版本的数据目录整体迁移到新目录，迁移成功后固定使用新目录。
+function migrateUserData(from:string,to:string){
+  if(!existsSync(from)||existsSync(to))return
+  try{mkdirSync(dirname(to),{recursive:true});renameSync(from,to);return}catch{}
+  try{cpSync(from,to,{recursive:true})}catch{}
+}
+app.setName('五成电商订单导出助手')
+if(process.env.ORDERDESK_TEST_DATA)app.setPath('userData',resolve(process.env.ORDERDESK_TEST_DATA))
+else{const dataDir=join(app.getPath('appData'),'五成电商订单导出助手');migrateUserData(join(app.getPath('appData'),'买家订单导出台'),dataDir);app.setPath('userData',dataDir)}
 let store:Store,collector:Collector,proxy:OrderProxy,win:BrowserWindow,diagnostics:Diagnostics,journal:ExecutionLog;let exporting=false
 let logNotification:ReturnType<typeof setTimeout>|undefined
 const executionChanged=()=>{if(logNotification)return;logNotification=setTimeout(()=>{logNotification=undefined;if(win&&!win.isDestroyed())win.webContents.send('desk:executionChanged')},100);logNotification.unref()}
-if(process.env.ORDERDESK_TEST_DATA)app.setPath('userData',resolve(process.env.ORDERDESK_TEST_DATA))
 const change=()=>{if(win&&!win.isDestroyed())win.webContents.send('desk:changed')}
 const run=(id:string)=>{void collector.run(store.get(id)).catch(e=>{diagnostics.event('collector.failed',{taskId:id},e);store.update(id,{status:'failed',message:e.message});change()})}
 function bind(name:string,fn:(...args:any[])=>any){ipcMain.handle('desk:'+name,async(event,...args)=>{
