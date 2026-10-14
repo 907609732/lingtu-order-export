@@ -23,9 +23,9 @@ function migrateUserData(from:string,to:string){
   try{mkdirSync(dirname(to),{recursive:true});renameSync(from,to);return}catch{}
   try{cpSync(from,to,{recursive:true})}catch{}
 }
-app.setName('灵兔电商平台买家订单导出工具')
+app.setName('灵兔 AI 电商平台买家订单导出工具')
 if(process.env.ORDERDESK_TEST_DATA)app.setPath('userData',resolve(process.env.ORDERDESK_TEST_DATA))
-else{const dataDir=join(app.getPath('appData'),'灵兔电商平台买家订单导出工具');migrateUserData(join(app.getPath('appData'),'五成电商订单导出助手'),dataDir);migrateUserData(join(app.getPath('appData'),'买家订单导出台'),dataDir);app.setPath('userData',dataDir)}
+else{const dataDir=join(app.getPath('appData'),'灵兔 AI 电商平台买家订单导出工具');migrateUserData(join(app.getPath('appData'),'灵兔电商平台买家订单导出工具'),dataDir);migrateUserData(join(app.getPath('appData'),'五成电商订单导出助手'),dataDir);migrateUserData(join(app.getPath('appData'),'买家订单导出台'),dataDir);app.setPath('userData',dataDir)}
 let store:Store,collector:Collector,proxy:OrderProxy,win:BrowserWindow,diagnostics:Diagnostics,journal:ExecutionLog;let exporting=false
 let latestUpdate:UpdateInfo|null=null
 let logNotification:ReturnType<typeof setTimeout>|undefined
@@ -57,7 +57,7 @@ app.whenReady().then(async()=>{
   if(store.setting('loggingEnabled')==='true')try{diagnostics.setEnabled(true)}catch{/* The settings screen exposes log storage failures. */}
   diagnostics.event('app.start',{version:app.getVersion()})
   Menu.setApplicationMenu(null)
-  win=new BrowserWindow({width:1320,height:870,minWidth:1120,minHeight:740,show:false,title:'灵兔电商平台买家订单导出工具',backgroundColor:'#f6f7f9',webPreferences:{preload:join(root,'../preload/index.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}})
+  win=new BrowserWindow({width:1320,height:870,minWidth:1120,minHeight:740,show:false,title:'灵兔 AI 电商平台买家订单导出工具',backgroundColor:'#f6f7f9',webPreferences:{preload:join(root,'../preload/index.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}})
   win.webContents.setWindowOpenHandler(()=>({action:'deny'}));win.webContents.on('will-navigate',e=>e.preventDefault())
   win.webContents.on('render-process-gone',(_e,d)=>diagnostics.event('renderer.gone',{reason:d.reason,exitCode:d.exitCode},undefined,'error'))
   win.webContents.on('preload-error',(_e,_path,error)=>diagnostics.event('renderer.preload_failed',{},error))
@@ -107,7 +107,7 @@ app.whenReady().then(async()=>{
   if(process.env.ELECTRON_RENDERER_URL)await win.loadURL(process.env.ELECTRON_RENDERER_URL);else await win.loadFile(join(root,'../renderer/index.html'))
   win.show()
   if(process.env.ORDERDESK_SCREENSHOT){setTimeout(async()=>{await writeFile(process.env.ORDERDESK_SCREENSHOT!,(await win.webContents.capturePage()).toPNG())},2000)}
-}).catch(error=>{diagnostics?.event('app.start_failed',{},error);dialog.showErrorBox('灵兔电商平台买家订单导出工具启动失败',error instanceof Error?error.message:'无法初始化本机数据');app.quit()})
+}).catch(error=>{diagnostics?.event('app.start_failed',{},error);dialog.showErrorBox('灵兔 AI 电商平台买家订单导出工具启动失败',error instanceof Error?error.message:'无法初始化本机数据');app.quit()})
 process.on('unhandledRejection',error=>diagnostics?.event('app.unhandled_rejection',{},error))
 process.on('uncaughtExceptionMonitor',error=>diagnostics?.event('app.uncaught_exception',{},error))
 app.on('window-all-closed',()=>app.quit())

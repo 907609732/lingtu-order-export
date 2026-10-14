@@ -40,7 +40,7 @@ export async function exportOrders(task:Task,orders:Order[],directory:string,for
     await writeFile(path+'.tmp',data,'utf8');await rename(path+'.tmp',path)
     if(issues.length)await writeFile(path.replace(/\.csv$/,'_缺项清单.csv'),'\uFEFF'+['订单号,缺失内容,说明',...issues.map(i=>Object.values(i).map(csvCell).join(','))].join('\r\n'),'utf8')
   }else{
-    const book=new ExcelJS.Workbook();book.creator='灵兔电商平台买家订单导出工具';const sheet=book.addWorksheet('订单明细',{views:[{state:'frozen',ySplit:1}]})
+    const book=new ExcelJS.Workbook();book.creator='灵兔 AI 电商平台买家订单导出工具';const sheet=book.addWorksheet('订单明细',{views:[{state:'frozen',ySplit:1}]})
     sheet.columns=columns.map(c=>({...c,width:c.key==='title'?38:c.key==='address'?40:c.key==='imageUrl'?16:c.key==='id'||c.key.endsWith('At')?24:18}))
     for(const r of rows)sheet.addRow({...r,imageUrl:r.imageUrl})
     sheet.autoFilter={from:{row:1,column:1},to:{row:Math.max(1,rows.length+1),column:columns.length}}

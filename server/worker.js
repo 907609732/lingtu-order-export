@@ -1,4 +1,4 @@
-// 灵兔电商平台买家订单导出工具 · 日活/使用次数统计后端
+// 灵兔 AI 电商平台买家订单导出工具 · 日活/使用次数统计后端
 // 部署：Cloudflare Worker + KV。软件每次启动会 POST /report 上报一次启动。
 export default {
   async fetch(request, env) {
