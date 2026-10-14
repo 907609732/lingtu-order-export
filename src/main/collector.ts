@@ -166,7 +166,10 @@ export class Collector {
       if(reads>=1000){this.store.update(task.id,{status:'partial',message:'本次达到分页上限，已保存月份和页码，可继续采集'});this.changed();return}
       if(index+1<months.length)await delay(1600)
     }
-    if(!this.stopped.has(task.id)){this.store.update(task.id,{status:'partial',message:'淘宝所选月份列表已读取；订单详情仍需补全，已有结果可以导出'});this.changed()}
+    if(!this.stopped.has(task.id)){
+      const count=this.store.get(task.id).count
+      this.store.update(task.id,count?{status:'partial',message:'淘宝所选月份列表已读取；订单详情仍需补全，已有结果可以导出'}:{status:'completed',message:`已查完 ${task.from} 至 ${task.to}，该下单日期范围内没有订单。请调整日期范围或核对当前账号。`});this.changed()
+    }
   }
   private async pddIdentity(task:Task,view:WebContentsView){
     const cookies=await view.webContents.session.cookies.get({url:'https://mobile.yangkeduo.com/'})

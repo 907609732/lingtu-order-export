@@ -47,7 +47,7 @@ export class ExecutionLog {
       case 'collector.failed':message=`采集暂时中断：${reason}`;break
       case 'collector.parse_failed':message='收到的数据暂时无法解析，等待下一批订单响应。';break
       case 'collector.end':
-        if(c.status==='completed'){message=`采集完成，共 ${count} 笔订单，可导出文件。`;level='success'}
+        if(c.status==='completed'){message=count?`采集完成，共 ${count} 笔订单，可导出文件。`:'所选下单日期范围已查完，没有订单。请调整日期范围或核对当前账号。';level='success'}
         else if(c.status==='partial'){message=c.interrupted?`采集已中断，已保留 ${count} 笔。请检查上方错误提示后重试，已有结果可导出。`:`本次列表读取结束，已保留 ${count} 笔；详情或采集范围仍需核对，可先导出。`;level='warning'}
         else if(c.status==='needs_login'){message=`任务等待处理，已保留 ${count} 笔。请按上方提示处理后继续采集。`;level='warning'}
         else if(c.status==='failed'){message=`采集失败，已保留 ${count} 笔，请检查错误提示。`;level='error'}

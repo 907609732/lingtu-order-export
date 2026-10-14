@@ -10,6 +10,7 @@ const from=ref(today.slice(0,7)+'-01'),to=ref(today),format=ref<'xlsx'|'csv'>('x
 const platform=computed(()=>state.value?.platforms.find(p=>p.id===selected.value))
 const tasks=computed(()=>state.value?.tasks.filter(t=>t.platform===selected.value)||[])
 const task=computed(()=>state.value?.tasks.find(t=>t.id===taskId.value))
+const emptyResult=computed(()=>task.value?.status==='completed'&&task.value.count===0)
 const filtered=computed(()=>records.value.filter(o=>(o.id+' '+o.shop+' '+o.items.map(i=>i.title).join(' ')).includes(query.value)))
 const shown=computed(()=>filtered.value.slice((page.value-1)*30,page.value*30))
 const missing=computed(()=>records.value.filter(o=>o.missing.length).length)
@@ -27,7 +28,7 @@ async function toggleLogging(){const enabled=!state.value?.logging.enabled;await
 async function toggleExecutionLog(){const visible=!state.value?.showExecutionLog;await action(()=>desk.setExecutionLogVisible(visible),visible?'执行日志已显示，回到采集页面即可查看。':'执行日志面板已隐藏，重启后保留选择。')}
 async function navigate(s:'export'|'history'|'settings'){await hidePage();section.value=s}
 async function openTask(t:Task){selected.value=t.platform;taskId.value=t.id;from.value=t.from;to.value=t.to;section.value='export';page.value=1;await refresh()}
-onMounted(async()=>{await action(refresh);off=desk.onChange(()=>{if(refreshPending)return;refreshPending=true;setTimeout(()=>{refreshPending=false;void refresh()},250)})})
+onMounted(async()=>{await action(async()=>{await refresh();const latest=tasks.value[0];if(latest)await openTask(latest)});off=desk.onChange(()=>{if(refreshPending)return;refreshPending=true;setTimeout(()=>{refreshPending=false;void refresh()},250)})})
 onUnmounted(()=>off?.())
 </script>
 
@@ -56,6 +57,7 @@ onUnmounted(()=>off?.())
             <section class="config-card">
               <div class="section-head"><h2>导出范围</h2><span>按下单日期 · 全部订单状态</span></div>
               <div class="form-row"><label>开始日期<input v-model="from" type="date" :max="to"></label><span class="range-dash">—</span><label>结束日期<input v-model="to" type="date" :min="from"></label><div class="quick-date"><button @click="from=today.slice(0,7)+'-01';to=today">本月</button><button @click="from=today.slice(0,4)+'-01-01';to=today">今年</button></div><button class="primary start" :disabled="busy || task?.status==='running'" @click="start">{{task?.status==='running'?'正在采集…':'开始采集'}} <span>→</span></button></div>
+              <p class="date-hint">按订单的下单日期查询。历史订单请调整起止日期，或点击“今年”。</p>
               <div class="config-bottom"><div><label class="inline-label">文件格式<select v-model="format"><option value="xlsx">Excel (.xlsx)</option><option value="csv">CSV (.csv)</option></select></label><label class="checkbox"><input v-model="images" type="checkbox" :disabled="format==='csv'">嵌入商品图片</label></div><button class="text-button" @click="choose">{{state?.outputDir?'更改保存目录':'选择保存目录'}} ↗</button></div>
               <div v-if="state?.outputDir" class="folder-path" :title="state.outputDir">保存到 {{state.outputDir}} / {{platform?.name}}</div>
             </section>
@@ -64,7 +66,7 @@ onUnmounted(()=>off?.())
               <div class="results-header"><div><h2>采集结果 <span class="count">{{records.length}}</span></h2><p>{{task?`${task.from} 至 ${task.to}`:'采集后，你的订单会显示在这里'}}</p></div><div class="button-row"><button class="secondary" v-if="task && task.status==='running'" @click="action(()=>desk.pause(taskId))">暂停</button><button class="secondary" v-if="task && ['paused','needs_login','failed'].includes(task.status)" @click="action(()=>desk.resume(taskId))">继续采集</button><button class="text-button" v-if="task && task.status==='partial'" @click="action(()=>desk.retry(taskId))">重试采集</button><button class="primary" :disabled="!records.length||busy" @click="exportFile">{{busy?'处理中…':'导出文件'}} ↓</button></div></div>
               <div v-if="task" class="task-strip" :class="task.status"><span class="dot"></span><strong>{{labels[task.status]}}</strong><span>{{task.message}}</span><button v-if="task.status==='running'" @click="action(()=>desk.finish(taskId))">结束本次读取</button></div>
               <div v-if="records.length" class="table-tools"><input v-model="query" placeholder="搜索订单号、商品或店铺" @input="page=1"><span>{{missing?`${missing} 笔有待补全字段`:'已读取字段可导出'}}</span></div>
-              <div v-if="!records.length" class="empty-state"><div class="empty-icon"><svg viewBox="0 0 72 72" fill="none"><rect x="15" y="10" width="42" height="52" rx="8" stroke="currentColor" stroke-width="2"/><path d="M26 26h20M26 36h20M26 46h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div><h3>{{task?.status==='running'?'正在等待订单数据':'还没有采集订单'}}</h3><p>{{task?.status==='running'?'首次使用请先完成平台登录，再继续采集。':'先登录你的平台账号，选择日期后点击“开始采集”。'}}</p><div class="empty-note">每个平台独立登录 · 原软件数据保持原样</div></div>
+              <div v-if="!records.length" class="empty-state"><div class="empty-icon"><svg viewBox="0 0 72 72" fill="none"><rect x="15" y="10" width="42" height="52" rx="8" stroke="currentColor" stroke-width="2"/><path d="M26 26h20M26 36h20M26 46h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div><h3>{{emptyResult?'该日期范围内没有订单':task?.status==='running'?'正在读取订单':'还没有采集订单'}}</h3><p>{{emptyResult?`${task?.from} 至 ${task?.to} 已查询完毕，请选择订单实际的下单日期后重新采集。`:task?.status==='running'?'正在按所选日期查询，请留意上方执行日志。':task?.status==='needs_login'?'请在平台页完成登录或验证，再继续采集。':task?.status==='failed'?task.message:'选择订单下单日期后点击“开始采集”。'}}</p><div class="empty-note">每个平台独立登录 · 原软件数据保持原样</div></div>
               <div v-else class="table-wrap"><table><thead><tr><th>商品 / 订单号</th><th>下单时间</th><th>店铺</th><th class="amount">实付款</th><th>订单状态</th></tr></thead><tbody><tr v-for="o in shown" :key="o.id"><td><div class="product-cell"><div class="thumbnail">{{platform?.icon}}</div><div><strong :title="o.items.map(i=>i.title).join('；')">{{o.items.map(i=>i.title).join('；')||'商品信息待补全'}}</strong><span>{{o.id}} <small v-if="o.items.length>1">· {{o.items.length}} 件商品</small></span></div></div></td><td>{{o.createdAt}}</td><td>{{o.shop||'—'}}</td><td class="amount">{{o.paidFen===null?'—':'¥ '+(o.paidFen/100).toFixed(2)}}</td><td><span class="order-status">{{o.status||'待补全'}}</span></td></tr></tbody></table></div>
               <div v-if="records.length" class="table-footer"><span>共 {{filtered.length}} 笔订单 · 每页 30 笔</span><div><button :disabled="page===1" @click="page--">‹</button><span>{{page}} / {{Math.max(1,Math.ceil(filtered.length/30))}}</span><button :disabled="page*30>=filtered.length" @click="page++">›</button></div></div>
             </section>
