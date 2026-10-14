@@ -9,6 +9,8 @@ const api:DeskAPI={
   setLogging:enabled=>ipcRenderer.invoke('desk:setLogging',enabled),openLogs:()=>ipcRenderer.invoke('desk:openLogs'),
   reportError:(origin,error)=>ipcRenderer.invoke('desk:reportError',origin,error),
   executionLogs:platform=>ipcRenderer.invoke('desk:executionLogs',platform),setExecutionLogVisible:visible=>ipcRenderer.invoke('desk:setExecutionLogVisible',visible),
-  onExecutionLog:callback=>{const listener=()=>callback();ipcRenderer.on('desk:executionChanged',listener);return()=>ipcRenderer.removeListener('desk:executionChanged',listener)}
+  onExecutionLog:callback=>{const listener=()=>callback();ipcRenderer.on('desk:executionChanged',listener);return()=>ipcRenderer.removeListener('desk:executionChanged',listener)},
+  checkUpdate:()=>ipcRenderer.invoke('desk:checkUpdate'),openUpdate:()=>ipcRenderer.invoke('desk:openUpdate'),openWebsite:()=>ipcRenderer.invoke('desk:openWebsite'),
+  onUpdate:callback=>{const listener=()=>callback();ipcRenderer.on('desk:updateAvailable',listener);return()=>ipcRenderer.removeListener('desk:updateAvailable',listener)}
 }
 contextBridge.exposeInMainWorld('desk',api)

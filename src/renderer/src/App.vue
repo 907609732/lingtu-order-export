@@ -15,7 +15,7 @@ const filtered=computed(()=>records.value.filter(o=>(o.id+' '+o.shop+' '+o.items
 const shown=computed(()=>filtered.value.slice((page.value-1)*30,page.value*30))
 const missing=computed(()=>records.value.filter(o=>o.missing.length).length)
 const labels:Record<string,string>={running:'正在采集',paused:'已暂停',needs_login:'需要登录 / 验证',partial:'已有结果 · 待核对',completed:'读取完成',failed:'需要处理'}
-let off:(()=>void)|undefined;let refreshPending=false
+let off:(()=>void)|undefined;let offUpdate:(()=>void)|undefined;let refreshPending=false
 async function refresh(){state.value=await desk.state();if(taskId.value)records.value=await desk.orders(taskId.value)}
 async function action(fn:()=>Promise<unknown>,message=''){busy.value=true;notice.value='';error.value=false;try{await fn();if(message)notice.value=message;await refresh()}catch(e){notice.value=String(e instanceof Error?e.message:e).replace(/^Error invoking remote method '[^']+': Error: /,'');error.value=true}finally{busy.value=false}}
 async function selectPlatform(id:PlatformId){if(state.value?.tasks.some(t=>t.status==='running'&&t.platform!==id)){notice.value='请先暂停当前平台的采集任务，再切换平台';error.value=true;return}await desk.hidePage();pageOpen.value=false;selected.value=id;section.value='export';taskId.value=state.value?.tasks.find(t=>t.platform===id)?.id||'';query.value='';page.value=1;records.value=taskId.value?await desk.orders(taskId.value):[]}
@@ -28,8 +28,11 @@ async function toggleLogging(){const enabled=!state.value?.logging.enabled;await
 async function toggleExecutionLog(){const visible=!state.value?.showExecutionLog;await action(()=>desk.setExecutionLogVisible(visible),visible?'执行日志已显示，回到采集页面即可查看。':'执行日志面板已隐藏，重启后保留选择。')}
 async function navigate(s:'export'|'history'|'settings'){await hidePage();section.value=s}
 async function openTask(t:Task){selected.value=t.platform;taskId.value=t.id;from.value=t.from;to.value=t.to;section.value='export';page.value=1;await refresh()}
-onMounted(async()=>{await action(async()=>{await refresh();const latest=tasks.value[0];if(latest)await openTask(latest)});off=desk.onChange(()=>{if(refreshPending)return;refreshPending=true;setTimeout(()=>{refreshPending=false;void refresh()},250)})})
-onUnmounted(()=>off?.())
+async function checkUpdate(){await action(async()=>{const info=await desk.checkUpdate();notice.value=info?`发现新版本 v${info.latest}，可前往下载。`:'当前已是最新版本。'})}
+function openUpdate(){void desk.openUpdate()}
+function openWebsite(){void desk.openWebsite()}
+onMounted(async()=>{await action(async()=>{await refresh();const latest=tasks.value[0];if(latest)await openTask(latest)});off=desk.onChange(()=>{if(refreshPending)return;refreshPending=true;setTimeout(()=>{refreshPending=false;void refresh()},250)});offUpdate=desk.onUpdate(()=>{void refresh()})})
+onUnmounted(()=>{off?.();offUpdate?.()})
 </script>
 
 <template>
@@ -41,7 +44,7 @@ onUnmounted(()=>off?.())
       <div class="side-bottom"><button :class="{active:section==='history'}" @click="navigate('history')">◷ <span>导出任务</span><small>{{state?.tasks.length||0}}</small></button><button :class="{active:section==='settings'}" @click="navigate('settings')">⚙ <span>保存与设置</span></button><div class="local-badge"><span class="dot"></span> 数据保存在这台电脑</div></div>
     </aside>
     <main>
-      <header class="topbar"><div class="breadcrumb">个人工作台 <span>/</span> {{section==='history'?'导出任务':section==='settings'?'保存与设置':platform?.name}}</div><div class="version">本机版 <span>v{{state?.version||'0.1.0'}}</span></div></header>
+      <header class="topbar"><div class="breadcrumb">个人工作台 <span>/</span> {{section==='history'?'导出任务':section==='settings'?'保存与设置':platform?.name}}</div><div class="version">本机版 <span>v{{state?.version||'0.1.0'}}</span><a v-if="state?.update" class="update-link" href="#" @click.prevent="openUpdate">新版本 v{{state.update.latest}} ↗</a></div></header>
       <div class="content">
         <div v-if="notice" class="notice" :class="{error}">{{notice}}<button @click="notice=''">×</button></div>
         <template v-if="section==='export'">
@@ -91,6 +94,7 @@ onUnmounted(()=>off?.())
           <section class="settings-card"><h2>导出文件夹</h2><p class="path">{{state?.outputDir||'还未选择，首次导出前设置即可'}}</p><div class="button-row"><button class="primary" @click="choose">选择文件夹</button><button class="secondary" :disabled="!state?.outputDir" @click="action(()=>desk.openOutput())">打开文件夹</button></div></section>
           <section class="settings-card"><h2>本机采集数据</h2><p>任务和订单持续保存在这台电脑。清理不会删除你已经导出的文件。</p><div class="button-row"><select v-model="selected"><option v-for="p in state?.platforms" :value="p.id">{{p.name}}</option></select><button class="secondary danger" @click="action(()=>desk.clear(selected),'已完成清理操作')">清理所选平台缓存</button></div></section>
           <section class="settings-card"><h2>当前验证状态</h2><p>开发验证版。程序安装、样例解析和文件生成，与真实平台采集验收分别记录。请先使用短日期范围核对订单。</p></section>
+          <section class="settings-card about-card"><h2>关于</h2><p class="about-brand">五成电商订单导出助手 <span class="by">BY 五成</span></p><div class="button-row"><button class="secondary" :disabled="busy" @click="openWebsite">访问官网 ↗</button><button class="secondary" :disabled="busy" @click="checkUpdate">检查更新</button></div><p v-if="state?.update" class="update-tip">发现新版本 v{{state.update.latest}}，<a href="#" @click.prevent="openUpdate">前往下载</a></p></section>
         </template>
       </div>
     </main>

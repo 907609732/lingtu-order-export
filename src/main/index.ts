@@ -12,7 +12,10 @@ import { OrderProxy } from './proxy'
 import { Diagnostics } from './diagnostics'
 import { ExecutionLog } from './execution-log'
 import { ExecutionProgress } from './execution-progress'
-import type { ExportInput,PlatformId,StartInput } from '../shared/types'
+import type { ExportInput,PlatformId,StartInput,UpdateInfo } from '../shared/types'
+import { WEBSITE_URL } from '../shared/config'
+import { checkLatest,compareVersions } from './updater'
+import { reportLaunch } from './analytics'
 const root=dirname(fileURLToPath(import.meta.url))
 // 首次启动时把旧版本的数据目录整体迁移到新目录，迁移成功后固定使用新目录。
 function migrateUserData(from:string,to:string){
@@ -24,6 +27,7 @@ app.setName('五成电商订单导出助手')
 if(process.env.ORDERDESK_TEST_DATA)app.setPath('userData',resolve(process.env.ORDERDESK_TEST_DATA))
 else{const dataDir=join(app.getPath('appData'),'五成电商订单导出助手');migrateUserData(join(app.getPath('appData'),'买家订单导出台'),dataDir);app.setPath('userData',dataDir)}
 let store:Store,collector:Collector,proxy:OrderProxy,win:BrowserWindow,diagnostics:Diagnostics,journal:ExecutionLog;let exporting=false
+let latestUpdate:UpdateInfo|null=null
 let logNotification:ReturnType<typeof setTimeout>|undefined
 const executionChanged=()=>{if(logNotification)return;logNotification=setTimeout(()=>{logNotification=undefined;if(win&&!win.isDestroyed())win.webContents.send('desk:executionChanged')},100);logNotification.unref()}
 const change=()=>{if(win&&!win.isDestroyed())win.webContents.send('desk:changed')}
@@ -53,12 +57,12 @@ app.whenReady().then(async()=>{
   if(store.setting('loggingEnabled')==='true')try{diagnostics.setEnabled(true)}catch{/* The settings screen exposes log storage failures. */}
   diagnostics.event('app.start',{version:app.getVersion()})
   Menu.setApplicationMenu(null)
-  win=new BrowserWindow({width:1320,height:870,minWidth:1120,minHeight:740,show:false,title:'买家订单导出台',backgroundColor:'#f6f7f9',webPreferences:{preload:join(root,'../preload/index.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}})
+  win=new BrowserWindow({width:1320,height:870,minWidth:1120,minHeight:740,show:false,title:'五成电商订单导出助手',backgroundColor:'#f6f7f9',webPreferences:{preload:join(root,'../preload/index.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}})
   win.webContents.setWindowOpenHandler(()=>({action:'deny'}));win.webContents.on('will-navigate',e=>e.preventDefault())
   win.webContents.on('render-process-gone',(_e,d)=>diagnostics.event('renderer.gone',{reason:d.reason,exitCode:d.exitCode},undefined,'error'))
   win.webContents.on('preload-error',(_e,_path,error)=>diagnostics.event('renderer.preload_failed',{},error))
   collector=new Collector(win,store,change,diagnostics);proxy=new OrderProxy(join(app.getPath('userData'),'proxy-ca'),(p,b)=>collector.accept(p,b),diagnostics)
-  bind('state',()=>({platforms,tasks:store.tasks(),outputDir:store.setting('outputDir'),version:app.getVersion(),logging:diagnostics.state(),showExecutionLog:store.setting('showExecutionLog')!=='false',proxy:{running:proxy.running,port:proxy.port,certificate:proxy.certificate}}))
+  bind('state',()=>({platforms,tasks:store.tasks(),outputDir:store.setting('outputDir'),version:app.getVersion(),logging:diagnostics.state(),showExecutionLog:store.setting('showExecutionLog')!=='false',proxy:{running:proxy.running,port:proxy.port,certificate:proxy.certificate},update:latestUpdate}))
   bind('executionLogs',(platform:PlatformId)=>journal.snapshot(target(platform)))
   bind('setExecutionLogVisible',(visible:unknown)=>{if(typeof visible!=='boolean')throw new Error('执行日志开关参数无效');store.setting('showExecutionLog',String(visible));change()})
   bind('setLogging',(enabled:unknown)=>{
@@ -94,11 +98,16 @@ app.whenReady().then(async()=>{
   bind('proxyStop',()=>{proxy.stop();change()})
   bind('certificate',async()=>{if(!proxy.running)throw new Error('请先开启辅助采集');await shell.openPath(proxy.certificate)})
   bind('proxySettings',()=>shell.openExternal('ms-settings:network-proxy'))
+  bind('checkUpdate',async()=>{const latest=await checkLatest();if(latest&&compareVersions(latest.latest,app.getVersion())>0){latestUpdate={...latest,current:app.getVersion()};if(win&&!win.isDestroyed())win.webContents.send('desk:updateAvailable',latestUpdate)}return latestUpdate})
+  bind('openUpdate',()=>{if(latestUpdate?.url)shell.openExternal(latestUpdate.url)})
+  bind('openWebsite',()=>{if(WEBSITE_URL)shell.openExternal(WEBSITE_URL)})
+  // 后台记录启动、上报日活、检查更新；均不影响正常使用，失败静默。
+  void (async()=>{const installId=store.installId();store.logLaunch(app.getVersion());await reportLaunch(installId,app.getVersion());const latest=await checkLatest();if(latest&&compareVersions(latest.latest,app.getVersion())>0){latestUpdate={...latest,current:app.getVersion()};if(win&&!win.isDestroyed())win.webContents.send('desk:updateAvailable',latestUpdate)}})()
   win.once('ready-to-show',()=>win.show())
   if(process.env.ELECTRON_RENDERER_URL)await win.loadURL(process.env.ELECTRON_RENDERER_URL);else await win.loadFile(join(root,'../renderer/index.html'))
   win.show()
   if(process.env.ORDERDESK_SCREENSHOT){setTimeout(async()=>{await writeFile(process.env.ORDERDESK_SCREENSHOT!,(await win.webContents.capturePage()).toPNG())},2000)}
-}).catch(error=>{diagnostics?.event('app.start_failed',{},error);dialog.showErrorBox('订单导出台启动失败',error instanceof Error?error.message:'无法初始化本机数据');app.quit()})
+}).catch(error=>{diagnostics?.event('app.start_failed',{},error);dialog.showErrorBox('五成电商订单导出助手启动失败',error instanceof Error?error.message:'无法初始化本机数据');app.quit()})
 process.on('unhandledRejection',error=>diagnostics?.event('app.unhandled_rejection',{},error))
 process.on('uncaughtExceptionMonitor',error=>diagnostics?.event('app.uncaught_exception',{},error))
 app.on('window-all-closed',()=>app.quit())

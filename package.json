@@ -1,6 +1,6 @@
 {
   "name": "wucheng-order-export",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "五成电商平台买家订单导出",
   "author": "Local Order Desk",
   "private": true,
