@@ -1,7 +1,7 @@
 {
-  "name": "wucheng-order-export",
+  "name": "lingtu-order-export",
   "version": "0.1.7",
-  "description": "五成电商平台买家订单导出",
+  "description": "灵兔电商平台买家订单导出",
   "author": "Local Order Desk",
   "private": true,
   "type": "module",
@@ -37,8 +37,8 @@
   },
   "build": {
     "electronDist": "node_modules/electron/dist",
-    "appId": "com.wucheng.order-export",
-    "productName": "五成电商订单导出助手",
+    "appId": "com.lingtu.order-export",
+    "productName": "灵兔电商平台买家订单导出工具",
     "directories": {
       "output": "release"
     },
@@ -51,14 +51,14 @@
       "target": [
         "nsis"
       ],
-      "artifactName": "WuchengOrderExport-${version}-Setup.${ext}"
+      "artifactName": "LingtuOrderExport-${version}-Setup.${ext}"
     },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "shortcutName": "五成电商订单导出助手",
+      "shortcutName": "灵兔电商平台买家订单导出工具",
       "deleteAppDataOnUninstall": false
     }
   },

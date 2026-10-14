@@ -16,7 +16,7 @@ export async function checkLatest(repo: string = UPDATE_REPO): Promise<{ latest:
   try {
     const res = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {
       signal: AbortSignal.timeout(10000),
-      headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'wucheng-order-export' }
+      headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'lingtu-order-export' }
     })
     if (!res.ok) return null
     const data = await res.json() as any
