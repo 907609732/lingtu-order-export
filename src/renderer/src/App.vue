@@ -6,7 +6,7 @@ const desk = window.desk
 const executionPanel=ref<InstanceType<typeof ExecutionLog>>()
 const state=ref<AppState|null>(null), selected=ref<PlatformId>('taobao'), taskId=ref(''), records=ref<Order[]>([])
 const today=new Date(Date.now()+8*3600000).toISOString().slice(0,10)
-const from=ref(today.slice(0,7)+'-01'),to=ref(today),format=ref<'xlsx'|'csv'>('xlsx'),images=ref(true),busy=ref(false),pageOpen=ref(false),section=ref<'export'|'history'|'settings'>('export'),query=ref(''),page=ref(1),notice=ref(''),error=ref(false)
+const from=ref(today.slice(0,7)+'-01'),to=ref(today),format=ref<'xlsx'|'csv'>('xlsx'),images=ref(true),busy=ref(false),pageOpen=ref(false),section=ref<'export'|'history'|'settings'|'help'>('export'),query=ref(''),page=ref(1),notice=ref(''),error=ref(false)
 const platform=computed(()=>state.value?.platforms.find(p=>p.id===selected.value))
 const tasks=computed(()=>state.value?.tasks.filter(t=>t.platform===selected.value)||[])
 const task=computed(()=>state.value?.tasks.find(t=>t.id===taskId.value))
@@ -26,7 +26,7 @@ async function exportFile(){await action(async()=>{if(!state.value?.outputDir){a
 async function choose(){await hidePage();await action(()=>desk.chooseDirectory())}
 async function toggleLogging(){const enabled=!state.value?.logging.enabled;await action(()=>desk.setLogging(enabled),enabled?'问题排查日志已开启，复现问题后可打开日志文件夹查看。':'问题排查日志已关闭，已有日志仍保留在本机。')}
 async function toggleExecutionLog(){const visible=!state.value?.showExecutionLog;await action(()=>desk.setExecutionLogVisible(visible),visible?'执行日志已显示，回到采集页面即可查看。':'执行日志面板已隐藏，重启后保留选择。')}
-async function navigate(s:'export'|'history'|'settings'){await hidePage();section.value=s}
+async function navigate(s:'export'|'history'|'settings'|'help'){await hidePage();section.value=s}
 async function openTask(t:Task){selected.value=t.platform;taskId.value=t.id;from.value=t.from;to.value=t.to;section.value='export';page.value=1;await refresh()}
 async function checkUpdate(){await action(async()=>{const info=await desk.checkUpdate();notice.value=info?`发现新版本 v${info.latest}，可前往下载。`:'当前已是最新版本。'})}
 function openUpdate(){void desk.openUpdate()}
@@ -41,10 +41,10 @@ onUnmounted(()=>{off?.();offUpdate?.()})
       <div class="brand"><div class="brand-symbol">▤</div><div><strong>订单导出台</strong><span>你的订单，集中导出</span></div></div>
       <div class="nav-label">购物平台 <span>{{ state?.platforms.length || 9 }}</span></div>
       <nav><button v-for="p in state?.platforms" :key="p.id" class="platform" :class="{ selected:p.id===selected && section==='export' }" @click="selectPlatform(p.id)"><i :style="{color:p.color,background:p.color+'13'}">{{p.icon}}</i><span>{{p.name}}</span><b v-if="p.id===selected && section==='export'">›</b></button></nav>
-      <div class="side-bottom"><button :class="{active:section==='history'}" @click="navigate('history')">◷ <span>导出任务</span><small>{{state?.tasks.length||0}}</small></button><button :class="{active:section==='settings'}" @click="navigate('settings')">⚙ <span>保存与设置</span></button><div class="local-badge"><span class="dot"></span> 数据保存在这台电脑</div></div>
+      <div class="side-bottom"><button :class="{active:section==='history'}" @click="navigate('history')">◷ <span>导出任务</span><small>{{state?.tasks.length||0}}</small></button><button :class="{active:section==='help'}" @click="navigate('help')">❓ <span>使用教程</span></button><button :class="{active:section==='settings'}" @click="navigate('settings')">⚙ <span>保存与设置</span></button><div class="local-badge"><span class="dot"></span> 数据保存在这台电脑</div></div>
     </aside>
     <main>
-      <header class="topbar"><div class="breadcrumb">个人工作台 <span>/</span> {{section==='history'?'导出任务':section==='settings'?'保存与设置':platform?.name}}</div><div class="version">本机版 <span>v{{state?.version||'0.1.0'}}</span><a v-if="state?.update" class="update-link" href="#" @click.prevent="openUpdate">新版本 v{{state.update.latest}} ↗</a></div></header>
+      <header class="topbar"><div class="breadcrumb">个人工作台 <span>/</span> {{section==='history'?'导出任务':section==='settings'?'保存与设置':section==='help'?'使用教程':platform?.name}}</div><div class="version">本机版 <span>v{{state?.version||'0.1.0'}}</span><a v-if="state?.update" class="update-link" href="#" @click.prevent="openUpdate">新版本 v{{state.update.latest}} ↗</a></div></header>
       <div class="content">
         <div v-if="notice" class="notice" :class="{error}">{{notice}}<button @click="notice=''">×</button></div>
         <template v-if="section==='export'">
@@ -77,7 +77,7 @@ onUnmounted(()=>{off?.();offUpdate?.()})
           </template>
         </template>
         <template v-else-if="section==='history'"><div class="page-title"><div><div class="eyebrow">EXPORT HISTORY</div><h1>导出任务</h1><p>保留每次采集的结果，方便继续读取和重新导出。</p></div></div><section class="results-card"><div v-if="!state?.tasks.length" class="empty-state"><h3>暂无导出任务</h3><p>选择左侧平台开始第一次采集。</p></div><button v-for="t in state?.tasks" :key="t.id" class="history-row" @click="openTask(t)"><div><strong>{{state?.platforms.find(p=>p.id===t.platform)?.name}}</strong><span>{{t.from}} 至 {{t.to}}</span></div><span>{{t.count}} 笔</span><span class="tag">{{labels[t.status]}}</span><b>查看 →</b></button></section></template>
-        <template v-else>
+        <template v-else-if="section==='settings'">
           <div class="page-title"><div><div class="eyebrow">PREFERENCES</div><h1>保存与设置</h1><p>简单设置，方便下次继续使用。</p></div></div>
           <section class="settings-card">
             <div class="logging-row"><div><h2 id="execution-log-label">显示执行日志</h2><p>{{state?.showExecutionLog?'已显示 · 在采集界面实时查看执行过程':'已隐藏 · 采集界面不显示日志面板'}}，重启后保留选择。</p></div><button role="switch" aria-labelledby="execution-log-label" :aria-checked="!!state?.showExecutionLog" :disabled="busy||!state" class="log-switch" :class="{on:state?.showExecutionLog}" @click="toggleExecutionLog"><span></span></button></div>
@@ -95,6 +95,13 @@ onUnmounted(()=>{off?.();offUpdate?.()})
           <section class="settings-card"><h2>本机采集数据</h2><p>任务和订单持续保存在这台电脑。清理不会删除你已经导出的文件。</p><div class="button-row"><select v-model="selected"><option v-for="p in state?.platforms" :value="p.id">{{p.name}}</option></select><button class="secondary danger" @click="action(()=>desk.clear(selected),'已完成清理操作')">清理所选平台缓存</button></div></section>
           <section class="settings-card"><h2>当前验证状态</h2><p>开发验证版。程序安装、样例解析和文件生成，与真实平台采集验收分别记录。请先使用短日期范围核对订单。</p></section>
           <section class="settings-card about-card"><h2>关于</h2><p class="about-brand">灵兔 AI 电商平台买家订单导出工具 <span class="by">BY 五成</span></p><div class="button-row"><button class="secondary" :disabled="busy" @click="openWebsite">访问官网 ↗</button><button class="secondary" :disabled="busy" @click="checkUpdate">检查更新</button></div><p v-if="state?.update" class="update-tip">发现新版本 v{{state.update.latest}}，<a href="#" @click.prevent="openUpdate">前往下载</a></p></section>
+        </template>
+        <template v-else>
+          <div class="page-title"><div><div class="eyebrow">GUIDE</div><h1>使用教程</h1><p>了解这个软件能做什么，以及如何导出你的订单。</p></div></div>
+          <section class="settings-card"><h2>这个软件是做什么的</h2><p>灵兔 AI 电商平台买家订单导出工具，是在你自己的 Windows 电脑上运行的订单导出工具。它登录各电商平台的官方页面，读取你作为<strong>买家</strong>的历史订单，整理成表格导出到本地（Excel 或 CSV，可含商品图片），方便对账、归档和留底。</p><p>支持 <strong>9 个平台</strong>：淘宝/天猫、1688、拼多多、京东、闲鱼（软件内登录官方页面），以及得物、快手、饿了么、美团（微信小程序辅助采集）。</p><p>订单和登录状态<strong>只保存在这台电脑</strong>，不会上传到任何服务器。</p></section>
+          <section class="settings-card"><h2>快速上手（4 步）</h2><ol class="guide-steps"><li><b>选择平台并登录</b>——点左侧平台，再点右上角「登录 / 查看平台页」，在官方页面完成登录后返回。</li><li><b>选择日期范围</b>——按订单的下单时间设置起止日期，或用「本月」「今年」快捷按钮。</li><li><b>开始采集</b>——点「开始采集」，软件按页读取订单，下方「执行日志」显示实时进度。</li><li><b>导出文件</b>——采集完成后点「导出文件」，选择格式（Excel/CSV）和保存目录即可。</li></ol></section>
+          <section class="settings-card"><h2>小程序平台（得物 / 快手 / 饿了么 / 美团）</h2><p>这几个平台需先完成一次性的证书和代理设置（软件内有详细步骤），再在微信小程序里打开对应平台的订单列表并向下翻页，软件会自动读取。</p></section>
+          <section class="settings-card"><h2>常见提示</h2><ul class="guide-tips"><li>历史订单要选对日期范围；日期内没有订单会明确提示，改日期重新采集即可。</li><li>导出文件按平台分目录并带时间戳，不会覆盖旧文件。</li><li>采集结果随时可在「导出任务」里重新打开、继续或重新导出。</li><li>软件会在后台检查更新，发现新版在顶部提示；数据保存位置见「保存与设置」。</li></ul></section>
         </template>
       </div>
     </main>
