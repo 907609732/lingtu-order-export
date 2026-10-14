@@ -1,0 +1,7 @@
+name = "wucheng-telemetry"
+main = "worker.js"
+compatibility_date = "2024-11-01"
+
+[[kv_namespaces]]
+binding = "TELEMETRY"
+id = "9552eae28da146c7a0802beb2bbf1fc5"
