@@ -51,7 +51,7 @@ app.whenReady().then(async()=>{
   if(store.setting('loggingEnabled')==='true')try{diagnostics.setEnabled(true)}catch{/* The settings screen exposes log storage failures. */}
   diagnostics.event('app.start',{version:app.getVersion()})
   Menu.setApplicationMenu(null)
-  win=new BrowserWindow({width:1320,height:870,minWidth:1120,minHeight:740,show:false,title:'灵兔 AI 电商平台买家订单导出工具',backgroundColor:'#f6f7f9',icon:nativeImage.createFromPath(join(root,'../../build/icon.png')),webPreferences:{preload:join(root,'../preload/index.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}})
+  win=new BrowserWindow({width:1320,height:870,minWidth:1120,minHeight:740,show:false,title:'灵兔 AI 电商平台买家订单导出工具',backgroundColor:'#f5f5f7',titleBarStyle:'hidden',...(process.platform==='win32'?{titleBarOverlay:{color:'#f5f5f7',symbolColor:'#52525b',height:44}}:{}),icon:nativeImage.createFromPath(join(root,'../../build/icon.png')),webPreferences:{preload:join(root,'../preload/index.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}})
   win.webContents.setWindowOpenHandler(()=>({action:'deny'}));win.webContents.on('will-navigate',e=>e.preventDefault())
   win.webContents.on('render-process-gone',(_e,d)=>diagnostics.event('renderer.gone',{reason:d.reason,exitCode:d.exitCode},undefined,'error'))
   win.webContents.on('preload-error',(_e,_path,error)=>diagnostics.event('renderer.preload_failed',{},error))

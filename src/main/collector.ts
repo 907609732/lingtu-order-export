@@ -25,7 +25,7 @@ export class Collector {
     return unwrapMtopResponse(result)
   }
   private pageRead(task:Task,page:number,received:number,extra:Record<string,unknown>={}){this.diagnostics.event('collector.page',{platform:task.platform,taskId:task.id,page,received,count:this.store.get(task.id).count,...extra})}
-  layout(){if(this.current){const [w,h]=this.win.getContentSize();this.current.setBounds({x:184,y:146,width:Math.max(300,w-200),height:Math.max(200,h-162)})}}
+  layout(){if(this.current){const [w,h]=this.win.getContentSize();this.current.setBounds({x:200,y:146,width:Math.max(300,w-216),height:Math.max(200,h-162)})}}
   async openOrder(order:Order){
     const url=order.platform==='taobao'?taobaoDetailUrl(order.detailUrl,order.id):order.detailUrl
     let parsed:URL;try{parsed=new URL(url)}catch{throw new Error('此订单尚未取得平台详情链接')}

@@ -1,6 +1,6 @@
 {
   "name": "lingtu-order-export",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "灵兔 AI 电商平台买家订单导出",
   "author": "Local Order Desk",
   "private": true,
@@ -15,6 +15,7 @@
     "check": "npm run test && npm run build"
   },
   "dependencies": {
+    "@element-plus/icons-vue": "2.3.2",
     "electron-log": "5.4.4",
     "element-plus": "2.14.7",
     "exceljs": "4.4.0",

@@ -3,7 +3,8 @@ import { computed,nextTick,onMounted,onUnmounted,ref } from 'vue'
 import type { AppState,Order,PlatformId,Task } from '../../shared/types'
 import ExecutionLog from './ExecutionLog.vue'
 import OrderTable from './OrderTable.vue'
-import logoUrl from './assets/logo.png'
+import {Clock,QuestionFilled,Setting,Lock} from '@element-plus/icons-vue'
+import logoUrl from './assets/logo-icon.png'
 const desk = window.desk
 const executionPanel=ref<InstanceType<typeof ExecutionLog>>()
 const state=ref<AppState|null>(null), selected=ref<PlatformId>('taobao'), taskId=ref(''), records=ref<Order[]>([])
@@ -43,14 +44,14 @@ onUnmounted(()=>{off?.();offUpdate?.()})
 <template>
   <div class="app-shell" :class="{'data-workspace':section==='export'}">
     <aside class="sidebar">
-      <div class="brand"><img class="brand-logo" :src="logoUrl" alt="灵兔 AI 电商平台买家订单导出工具" /></div>
+      <div class="brand"><img class="brand-logo" :src="logoUrl" alt="灵兔 Logo" /><div><strong>灵兔 <span>AI</span></strong><small>电商订单工作台</small></div></div>
       <div class="nav-label">购物平台 <span>{{ state?.platforms.length || 9 }}</span></div>
       <nav><button v-for="p in state?.platforms" :key="p.id" class="platform" :class="{ selected:p.id===selected && section==='export' }" @click="selectPlatform(p.id)"><i :style="{color:p.color,background:p.color+'13'}">{{p.icon}}</i><span>{{p.name}}</span><b v-if="p.id===selected && section==='export'">›</b></button></nav>
-      <div class="side-bottom"><button :class="{active:section==='history'}" @click="navigate('history')">◷ <span>导出任务</span><small>{{state?.tasks.length||0}}</small></button><button :class="{active:section==='help'}" @click="navigate('help')">❓ <span>使用教程</span></button><button :class="{active:section==='settings'}" @click="navigate('settings')">⚙ <span>保存与设置</span></button><div class="local-badge"><span class="dot"></span> 数据保存在这台电脑</div></div>
+      <div class="side-bottom"><button :class="{active:section==='history'}" @click="navigate('history')"><Clock aria-hidden="true"/><span>导出任务</span><small>{{state?.tasks.length||0}}</small></button><button :class="{active:section==='help'}" @click="navigate('help')"><QuestionFilled aria-hidden="true"/><span>使用教程</span></button><button :class="{active:section==='settings'}" @click="navigate('settings')"><Setting aria-hidden="true"/><span>保存与设置</span></button><div class="local-badge"><Lock aria-hidden="true"/> 数据保存在这台电脑</div></div>
     </aside>
     <main>
       <header class="topbar"><div class="breadcrumb">个人工作台 <span>/</span> {{section==='history'?'导出任务':section==='settings'?'保存与设置':section==='help'?'使用教程':platform?.name}}</div><div class="version">本机版 <span>v{{state?.version||'0.1.0'}}</span><a v-if="state?.update" class="update-link" href="#" @click.prevent="openUpdate">新版本 v{{state.update.latest}} ↗</a></div></header>
-      <div class="content">
+      <div class="content" :class="section">
         <div v-if="notice" class="notice" :class="{error}">{{notice}}<button @click="notice=''">×</button></div>
         <template v-if="section==='export'">
           <div class="page-title"><div><div class="eyebrow">ORDER EXPORT</div><h1>{{platform?.name}}订单导出</h1><p>选择日期，读取买家订单，再保存到你的电脑。</p></div><button class="secondary" @click="pageOpen?hidePage():openPage()" :disabled="busy">{{pageOpen?'返回导出台':platform?.mode==='proxy'?'打开平台页面':'登录 / 查看平台页'}}</button></div>
