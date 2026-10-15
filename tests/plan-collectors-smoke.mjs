@@ -15,7 +15,7 @@ try {
   await app.evaluate(async({session},{orderSN})=>{
     for(const platform of ['taobao','alibaba','pdd','jd','xianyu']){
       const ses=session.fromPartition(`persist:orderdesk-${platform}`)
-      if(platform!=='pdd')await ses.cookies.set({url:platform==='taobao'?'https://buyertrade.taobao.com':platform==='alibaba'?'https://trade.1688.com':platform==='jd'?'https://order.jd.com':'https://www.goofish.com',name:platform==='jd'?'pin':'unb',value:'synthetic-plan-account'})
+      if(platform!=='pdd')await ses.cookies.set({url:platform==='taobao'?'https://buyertrade.taobao.com':platform==='alibaba'?'https://air.1688.com':platform==='jd'?'https://order.jd.com':'https://www.goofish.com',name:platform==='jd'?'pin':'unb',value:'synthetic-plan-account'})
       if(platform==='pdd'){await ses.cookies.set({url:'https://mobile.yangkeduo.com',name:'PDDAccessToken',value:'synthetic-token'});await ses.cookies.set({url:'https://mobile.yangkeduo.com',name:'pdd_user_id',value:'123'})}
       ses.protocol.handle('https',request=>{
         const u=new URL(request.url)

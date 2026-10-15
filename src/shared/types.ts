@@ -21,6 +21,7 @@ export interface PlanSegment extends DateSegment { id:string; status:PlanSegment
 export interface PlanBucket extends DateSegment { id:string; segmentIds:string[]; status:PlanSegmentStatus; cursor:string }
 export interface ExtractionPlan { granularity:'month'|'day'; segments:PlanSegment[]; buckets:PlanBucket[]; currentBucket?:string }
 export interface Task {
+  detailExport?: {requestedAt:string;previous:string[];token?:string}
   id: string; platform: PlatformId; account: string; from: string; to: string; status: TaskStatus; createdAt: string; updatedAt: string
   count: number; pages: number; message: string; cursor: string; exportedPath: string; accountKey?: string; accountCookie?:string; operation?:'list'|'details'; listOutcome?:ListOutcome; plan?:ExtractionPlan
 }

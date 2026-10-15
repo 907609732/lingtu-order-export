@@ -4,7 +4,7 @@ import { mtopRequest } from '../src/main/page-scripts'
 import { safeError } from '../src/main/diagnostics'
 
 afterEach(()=>{vi.useRealTimers();vi.unstubAllGlobals()})
-function page(request?:any){vi.stubGlobal('window',{lib:{mtop:request?{request}:undefined}});vi.stubGlobal('document',{title:'我的淘宝'});vi.stubGlobal('location',{hostname:'buyertrade.taobao.com'})}
+function page(request?:any){vi.stubGlobal('window',{lib:{mtop:request?{request}:undefined}});vi.stubGlobal('document',{title:'我的淘宝',querySelectorAll:()=>[]});vi.stubGlobal('location',{hostname:'buyertrade.taobao.com'})}
 describe('platform errors and buyer request contract',()=>{
   it('does not treat an internal service fault as expired login',()=>{
     const result=mtopFailure({ret:['FAIL_SYS_SERVICE_INNER_FAULT::PRIVATE_TOKEN 请登录'],data:{private:'PRIVATE_ORDER'}})

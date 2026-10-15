@@ -3,6 +3,7 @@ import { dirname,join,resolve,sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { mkdir,readFile,writeFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
+import {detailPlatforms} from '../core/extraction-plan'
 import { Store } from '../core/store'
 import { exportOrders } from '../core/exporter'
 import { platforms,platformById } from '../shared/platforms'
@@ -72,7 +73,7 @@ app.whenReady().then(async()=>{
   bind('login',async(id:PlatformId)=>{target(id);diagnostics.event('platform.open',{platform:id});await collector.show(id)})
   bind('hidePage',()=>collector.hide())
   bind('start',(input:StartInput)=>{idle();target(input.platform);const task=store.create(input);run(task.id);change();return task})
-  bind('enrichDetails',(id:string)=>{idle();const task=store.get(id);if(task.platform!=='taobao'||!task.count)throw new Error('请先采集淘宝订单列表');void collector.enrichTaobao(task).catch(error=>{diagnostics.event('collector.failed',{taskId:id,platform:task.platform},error);store.update(id,{status:'partial',message:'详情读取暂时中断，已有订单已保留'});change()})})
+  bind('enrichDetails',(id:string)=>{idle();const task=store.get(id);if(!detailPlatforms.includes(task.platform)||!task.count)throw new Error('请先采集当前平台订单列表');void collector.enrichDetails(task).catch(error=>{diagnostics.event('collector.failed',{taskId:id,platform:task.platform},error);store.update(id,{status:'partial',message:'详情读取暂时中断，已有订单已保留'});change()})})
   bind('openOrder',async(id:string,orderId:string)=>{idle();const order=store.orders(id).find(o=>o.id===orderId);if(!order)throw new Error('订单不存在');await collector.openOrder(order)})
   const taskAction=(id:string,action:string)=>diagnostics.event('task.action',{taskId:id,platform:store.get(id).platform,action})
   bind('pause',(id:string)=>{collector.stop(id);store.update(id,{status:'paused',message:'已暂停，当前结果已保存在本机'});taskAction(id,'pause');change()})

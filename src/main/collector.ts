@@ -16,6 +16,9 @@ import { parsePddList, parsePddDetailHtml } from './pdd-contract'
 import { pddPageRequest, pddDetailRequest } from './pdd-page'
 import { normalizePddDetail } from '../core/pdd-normalize'
 import {taobaoDetailUrl,readTaobaoDetailPage,mergeTaobaoVisibleDetail} from './taobao-detail'
+import {platformDetailUrl,mergePlatformVisibleDetail} from './platform-detail'
+import {readAlibabaExport,alibabaExportUrl} from './alibaba-detail'
+import {isAlibabaLoginLanding} from './platform-login'
 export class Collector {
   views=new Map<PlatformId,WebContentsView>(); current?:WebContentsView; active?:string; stopped=new Set<string>(); runs=new Set<string>(); private captureCount=0; private disposing=false
   constructor(private win:BrowserWindow,private store:Store,private changed:()=>void,private diagnostics:Diagnostics){win.on('resize',()=>this.layout())}
@@ -49,6 +52,26 @@ export class Collector {
   }
   private async navigateDetail(view:WebContentsView,url:string){
     await Promise.race([view.webContents.loadURL(url).catch(error=>{if(error?.errno!==-3&&error?.code!=='ERR_ABORTED')throw new CollectionError('network')}),delay(20000).then(()=>{throw new CollectionError('timeout')})])
+  }
+  async enrichDetails(task:Task):Promise<void>{
+    if(task.platform==='taobao')return this.enrichTaobao(task)
+    if(!['alibaba','pdd','jd','xianyu'].includes(task.platform))throw new Error('此平台暂不支持独立提取详情')
+    if(this.runs.size)throw new Error('上一个采集任务正在结束，请稍后再试')
+    this.runs.add(task.id);this.stopped.delete(task.id);this.active=task.id
+    const name=platformById(task.platform).name,started=Date.now();let interrupted=false
+    this.store.update(task.id,{status:'running',operation:'details',message:`正在提取${name}订单详情`});this.changed()
+    this.diagnostics.event('collector.start',{platform:task.platform,taskId:task.id,count:task.count})
+    this.progress.set(task.id,new ExecutionProgress(this.diagnostics,'collector',{platform:task.platform,taskId:task.id}))
+    try{
+      this.stage(task,{phase:'platform'});const view=await this.ensure(task.platform)
+      if(this.stopped.has(task.id))return
+      if(task.platform==='pdd')await this.pddDetails(task,view)
+      else if(task.platform==='xianyu')await this.xianyuDetails(task,view)
+      else if(task.platform==='alibaba')await this.alibabaDetails(task,view)
+      else await this.jdDetails(task,view)
+      if(!this.stopped.has(task.id)){const remaining=pendingDetails(this.store.orders(task.id)).length;this.store.update(task.id,{status:'partial',message:`${name}详情读取结束，${remaining?`还有 ${remaining} 笔未成功读取，可再次提取`:'已处理所有订单'}；未提供字段仍保留缺项`});this.changed()}
+    }catch(error){interrupted=true;this.diagnostics.event('collector.failed',{platform:task.platform,taskId:task.id},error);if(!this.stopped.has(task.id))this.store.update(task.id,{status:error instanceof CollectionError&&error.category==='login_or_verification'?'needs_login':'partial',message:error instanceof CollectionError?error.message:'详情读取暂时中断，已保留结果，可继续提取'})}
+    finally{this.runs.delete(task.id);if(this.active===task.id)this.active=undefined;this.progress.get(task.id)?.close();this.progress.delete(task.id);const latest=this.store.get(task.id);this.diagnostics.event('collector.end',{platform:task.platform,taskId:task.id,status:latest.status,count:latest.count,interrupted,durationMs:Date.now()-started});this.changed()}
   }
   async enrichTaobao(task:Task):Promise<void>{
     if(this.runs.size)throw new Error('上一个采集任务正在结束，请稍后再试')
@@ -95,11 +118,16 @@ export class Collector {
     if(view){this.hide();this.current=view;this.win.contentView.addChildView(view);this.layout()}
     // Show the official page while it loads; its analytics/assets must not freeze the host UI.
     await Promise.race([loading,delay(800)])
+    if(id==='alibaba'&&view&&isAlibabaLoginLanding(view.webContents.getURL()))await view.webContents.loadURL(platformById(id).url).catch(()=>{})
   }
   async ensure(id:PlatformId):Promise<WebContentsView>{
     const prior=this.views.get(id);if(prior&&!prior.webContents.isDestroyed())return prior
     const ses=session.fromPartition(`persist:orderdesk-${id}`);ses.setPermissionRequestHandler((_w,_p,done)=>done(false))
     const view=new WebContentsView({webPreferences:{session:ses,nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true}})
+    let loginReturns=0
+    view.webContents.on('did-navigate',(_event,url)=>{
+      if(id==='alibaba'&&isAlibabaLoginLanding(url)&&loginReturns<2){loginReturns++;void view.webContents.loadURL(platformById(id).url).catch(()=>{})}
+    })
     view.webContents.setWindowOpenHandler(({url})=>{try{if(allowedHost(id,new URL(url).hostname))void view.webContents.loadURL(url)}catch{}return{action:'deny'}})
     view.webContents.on('will-navigate',(event,url)=>{try{const host=new URL(url).hostname;if(!allowedHost(id,host)&&!['login.taobao.com','passport.jd.com','passport.pinduoduo.com'].includes(host))event.preventDefault()}catch{event.preventDefault()}})
     view.webContents.on('did-fail-load',(_e,code)=>{if(code===-3)return;this.diagnostics.event('platform.load_failed',{platform:id,networkCode:code},undefined,'warn');if(this.active){const t=this.store.get(this.active);if(t.platform===id)this.store.update(t.id,{status:'partial',message:'平台页面加载失败，请检查网络后继续'});this.changed()}})
@@ -121,7 +149,7 @@ export class Collector {
     if(!this.active)return;const task=this.store.get(this.active);if(task.platform!==platform||task.status!=='running')return
     // Taobao list responses belong to an explicit month/page request below.
     // Unrelated official-page refreshes must not change its cursor or page count.
-    if(platform==='taobao'||platform==='pdd'||task.plan)return
+    if(platform==='taobao'||platform==='pdd'||task.plan||task.operation==='details')return
     try{
       const orders=normalizePayload(platform,parsePayload(body));if(!orders.length){this.diagnostics.event('collector.response',{platform,taskId:task.id,received:0});return}
       const unknown=orders.filter(o=>!o.createdAt).length;const count=this.store.add(task.id,orders);this.captureCount++
@@ -131,7 +159,7 @@ export class Collector {
   }
   stop(id:string){this.diagnostics.event('collector.stop',{taskId:id});this.progress.get(id)?.close();this.progress.delete(id);this.stopped.add(id);if(this.active===id)this.active=undefined}
   async run(task:Task):Promise<void>{
-    if(task.operation==='details')return this.enrichTaobao(task)
+    if(task.operation==='details')return this.enrichDetails(task)
     if(this.runs.size)throw new Error('上一个采集任务正在结束，请稍后再试')
     this.runs.add(task.id);this.stopped.delete(task.id);this.active=task.id
     const started=Date.now();let interrupted=false;this.diagnostics.event('collector.start',{platform:task.platform,taskId:task.id,count:task.count,pages:task.pages})
@@ -301,7 +329,7 @@ export class Collector {
     if(!this.stopped.has(task.id)){this.store.update(task.id,{listOutcome:'limit',status:'partial',message:'本次达到分页上限，已保存进度，可继续采集'});this.changed()}
   }
   private async pddDetails(task:Task,view:WebContentsView){
-    const orders=this.store.orders(task.id).filter(o=>o.detailState!=='complete')
+    const orders=pendingDetails(this.store.orders(task.id))
     for(let i=0;i<orders.length&&!this.stopped.has(task.id);i++){
       this.stage(task,{phase:'detail',current:i+1,total:orders.length})
       await this.pddIdentity(task,view)
@@ -309,7 +337,7 @@ export class Collector {
         const result=unwrapMtopResponse(await view.webContents.executeJavaScript(`(${pddDetailRequest.toString()})(${JSON.stringify(orders[i].id)})`))
         if(this.stopped.has(task.id))return
         await this.pddIdentity(task,view)
-        this.store.add(task.id,[normalizePddDetail(orders[i],parsePddDetailHtml(result.body,orders[i].id))])
+        this.store.add(task.id,[{...normalizePddDetail(orders[i],parsePddDetailHtml(result.body,orders[i].id)),detailReadAt:new Date().toISOString()}])
       }catch(error){
         if(error instanceof CollectionError&&['login_or_verification','account_changed','platform_limit','network','timeout'].includes(error.category))throw error
         this.diagnostics.event('collector.detail_failed',{platform:task.platform,taskId:task.id},error,'warn')
@@ -320,13 +348,71 @@ export class Collector {
     }
   }
   async xianyuDetails(task:Task,view:WebContentsView){
-    const all=this.store.orders(task.id).filter(o=>o.detailState!=='complete')
+    const all=pendingDetails(this.store.orders(task.id))
     for(let i=0;i<all.length&&!this.stopped.has(task.id);i++){
       this.stage(task,{phase:'detail',current:i+1,total:all.length})
       let order=all[i]
       try{const response=await this.request(view,'mtop.idle.web.trade.order.detail',{tid:order.id},'xianyu');order=mergeXianyuDetail(order,response)}catch(error){if(error instanceof CollectionError&&['login_or_verification','platform_limit','account_changed','network','timeout'].includes(error.category))throw error;this.diagnostics.event('collector.detail_failed',{platform:task.platform,taskId:task.id},error,'warn');order={...order,missing:[...order.missing,'订单详情']}}
+      if(this.stopped.has(task.id))return
+      if(order.detailState==='complete')order.detailReadAt=new Date().toISOString()
       this.store.add(task.id,[order]);this.store.update(task.id,{message:`正在补全订单详情 ${i+1} / ${all.length}`});this.changed();await delay(900)
       this.diagnostics.event('collector.detail',{platform:task.platform,taskId:task.id,current:i+1,total:all.length})
+    }
+  }
+  private async jdDetails(task:Task,view:WebContentsView){await this.visibleDetails(task,view)}
+  private async alibabaDetails(task:Task,view:WebContentsView){
+    const api='mtop.1688.trading.dataline.service',hash=(value:string)=>createHash('sha256').update(value).digest('hex')
+    const records=async()=>{const response=await this.request(view,api,{serviceId:'OrderExportDataLineService.exportRecords',param:'buyerOrder'},'alibaba');if(!Array.isArray(response?.data?.data))throw new CollectionError('response_structure');return response.data.data as {path?:string;gmtCreate?:string;exportStatus?:string}[]}
+    let checkpoint=this.store.get(task.id).detailExport
+    if(!checkpoint){
+      const previous=(await records()).filter(r=>typeof r.path==='string').map(r=>hash(r.path!));if(this.stopped.has(task.id))return
+      checkpoint={requestedAt:new Date().toISOString(),previous};this.store.update(task.id,{detailExport:checkpoint})
+      const response=await this.request(view,api,{serviceId:'OrderExportDataLineService.buyerExportOrder',param:JSON.stringify({exportType:'buyerOrder',startDateTime:task.from+' 00:00:00',endDateTime:task.to+' 23:59:59'})},'alibaba')
+      const token=String(response?.data?.data||'');if(!/^\d{13}$/.test(token))throw new CollectionError('response_structure')
+      checkpoint.token=token;this.store.update(task.id,{detailExport:checkpoint})
+    }
+    for(let attempt=0;attempt<12&&!this.stopped.has(task.id);attempt++){
+      this.stage(task,{phase:'detail',current:attempt+1,total:12});this.store.update(task.id,{message:`等待1688官方详情文件生成（${attempt+1} / 12），可以暂停后继续`});this.changed()
+      const all=await records();if(this.stopped.has(task.id))return
+      const candidates=all.filter(r=>{if(r.exportStatus!=='SUCCESS'||!r.path||checkpoint!.previous.includes(hash(r.path)))return false;const stamp=dateText(r.gmtCreate);if(checkpoint!.token)return stamp===dateText(Number(checkpoint!.token));const delta=Date.parse(stamp.replace(' ','T')+'+08:00')-Date.parse(checkpoint!.requestedAt);return delta>=-1000&&delta<=30000})
+      if(candidates.length>1)throw new CollectionError('response_structure')
+      if(candidates.length===1){
+        const response=await view.webContents.session.fetch(alibabaExportUrl(candidates[0].path!));if(!response.ok)throw new CollectionError('network')
+        if(response.url)alibabaExportUrl(response.url)
+        const reader=response.body?.getReader();if(!reader)throw new CollectionError('response_structure');const chunks:Buffer[]=[];let size=0
+        try{for(;;){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>32*1024*1024)throw new Error('官方详情文件超过32MB，请缩小日期范围');chunks.push(Buffer.from(value));if(this.stopped.has(task.id))return}}finally{await reader.cancel().catch(()=>{})}
+        const rows=await readAlibabaExport(Buffer.concat(chunks),pendingDetails(this.store.orders(task.id)))
+        if(this.stopped.has(task.id))return
+        await this.assertPlanAccount(view,'alibaba');this.store.add(task.id,rows);this.changed()
+        this.diagnostics.event('collector.detail',{platform:'alibaba',taskId:task.id,current:rows.length,total:task.count})
+        return
+      }
+      if(attempt<11)await delay(10000)
+    }
+    if(!this.stopped.has(task.id))throw new Error('1688官方文件暂未生成，请稍后继续提取详情')
+  }
+  private async visibleDetails(task:Task,view:WebContentsView){
+    const orders=pendingDetails(this.store.orders(task.id))
+    for(let i=0;i<orders.length&&!this.stopped.has(task.id);i++){
+      this.stage(task,{phase:'detail',current:i+1,total:orders.length})
+      this.store.update(task.id,{message:`正在提取${platformById(task.platform).name}订单详情 ${i+1} / ${orders.length}`});this.changed()
+      try{
+        const url=platformDetailUrl(task.platform,orders[i].detailUrl,orders[i].id)
+        await this.assertPlanAccount(view,task.platform);await this.navigateDetail(view,url)
+        let merged:Order|undefined,previous='',stable=0
+        for(let attempt=0;attempt<40&&!this.stopped.has(task.id);attempt++){
+          const snap=await view.webContents.executeJavaScript(`(${readTaobaoDetailPage.toString()})()`)
+          try{const candidate=mergePlatformVisibleDetail(orders[i],snap),signature=JSON.stringify({...candidate,capturedAt:''});stable=signature===previous?stable+1:0;previous=signature;merged=candidate;if(stable>=3)break}
+          catch(error){merged=undefined;stable=0;previous='';if(error instanceof CollectionError&&error.category==='login_or_verification')throw error}
+          await delay(250)
+        }
+        if(this.stopped.has(task.id))return
+        if(!merged)throw new CollectionError('response_structure')
+        await this.assertPlanAccount(view,task.platform)
+        this.store.add(task.id,[{...merged,detailReadAt:new Date().toISOString()}]);this.changed()
+        this.diagnostics.event('collector.detail',{platform:task.platform,taskId:task.id,current:i+1,total:orders.length})
+      }catch(error){if(error instanceof CollectionError&&['login_or_verification','platform_limit','account_changed','network','timeout'].includes(error.category))throw error;this.diagnostics.event('collector.detail_failed',{platform:task.platform,taskId:task.id,current:i+1,total:orders.length},error,'warn')}
+      if(i+1<orders.length)await delay(900)
     }
   }
   async runPage(task:Task,view:WebContentsView){

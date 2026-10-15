@@ -52,8 +52,11 @@ function labelledValues(text:string):Map<string,string[]> {
 }
 
 export function mergeTaobaoVisibleDetail(order:Order,snapshot:TaobaoDetailSnapshot):Order {
+  return mergeVisibleOrderDetail(order,snapshot,taobaoDetailUrl)
+}
+export function mergeVisibleOrderDetail(order:Order,snapshot:TaobaoDetailSnapshot,validateUrl:(url:string,id:string)=>string):Order {
   if(snapshot.blocked)throw new CollectionError('login_or_verification')
-  taobaoDetailUrl(snapshot.url,order.id)
+  validateUrl(snapshot.url,order.id)
   const values=labelledValues(snapshot.text)
   // The official copy button is adjacent to the ID in innerText ("123…复制").
   // Accept only that known control suffix; do not weaken exact order binding.

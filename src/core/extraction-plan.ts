@@ -1,6 +1,7 @@
 import type {DateSegment,ExtractionPlan,PlanInput,PlatformId,Order,Task} from '../shared/types'
 import {checkRange,inRange} from './values'
 export const planPlatforms:PlatformId[]=['taobao','alibaba','pdd','jd','xianyu']
+export const detailPlatforms:PlatformId[]=['taobao','alibaba','pdd','jd','xianyu']
 export function dateSegments(from:string,to:string,granularity:'day'|'month'):DateSegment[]{
   checkRange(from,to)
   if(!['day','month'].includes(granularity))throw new Error('请选择按月或按天')
@@ -29,4 +30,4 @@ export function createPlan(platform:PlatformId,from:string,to:string,input:PlanI
 }
 export function acceptsPlanDate(plan:ExtractionPlan|undefined,date:string):boolean{return !plan||plan.segments.some(s=>inRange(date,s.from,s.to))}
 export function pendingDetails(orders:Order[]):Order[]{return orders.filter(o=>!o.detailReadAt&&o.detailState!=='complete'&&!o.extra['详情读取状态'])}
-export function shouldHighlightDetails(task:Task|undefined,orders:Order[]):boolean{return task?.platform==='taobao'&&task.status!=='running'&&task.status!=='needs_login'&&task.listOutcome==='complete'&&(!task.plan||task.plan.segments.every(s=>s.status==='completed'))&&pendingDetails(orders).length>0}
+export function shouldHighlightDetails(task:Task|undefined,orders:Order[]):boolean{return !!task&&detailPlatforms.includes(task.platform)&&task.status!=='running'&&task.status!=='needs_login'&&task.listOutcome==='complete'&&(!task.plan||task.plan.segments.every(s=>s.status==='completed'))&&pendingDetails(orders).length>0}

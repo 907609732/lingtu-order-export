@@ -31,7 +31,7 @@ export function advanceOrderPage():string {
 }
 export async function mtopRequest(api:string,data:any,platform='xianyu',classify=mtopFailure):Promise<any>{
   const w=window as any
-  const blocked=()=>/登录|安全验证|验证码/.test(document.title)||/login\.taobao\.com|passport\./.test(location.hostname)
+  const blocked=()=>/登录|安全验证|验证码/.test(document.title)||/login\.taobao\.com|passport\./.test(location.hostname)||[...document.querySelectorAll('iframe[src*="login.taobao.com"],iframe[src*="passport.1688.com"]')].some(el=>!!el.getClientRects().length)
   const failure=(category:string,code?:string)=>({__orderdeskFailure:{category,code}})
   for(let attempt=0;attempt<32&&!(w.lib?.mtop||w.mtop)?.request;attempt++){
     if(blocked())return failure('login_or_verification')
