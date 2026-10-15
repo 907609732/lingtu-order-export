@@ -2,6 +2,22 @@
 
 Windows 本机电商平台买家订单导出工具（五成）。当前为 **0.1.8 开发验证版**，尚未完成真实账号的逐平台验收。
 
+## 软件截图
+
+> 截图使用合成演示数据，非真实订单。
+
+**采集导出台** —— 选择下单日期范围，实时执行日志显示读取页数和进度，采集结果可直接导出：
+
+![采集导出台](docs/screenshots/01-export.png)
+
+| 使用教程 | 保存与设置 |
+| --- | --- |
+| ![使用教程](docs/screenshots/02-guide.png) | ![保存与设置](docs/screenshots/03-settings.png) |
+
+**导出任务** —— 保留每次采集的结果，方便继续读取和重新导出：
+
+![导出任务](docs/screenshots/04-history.png)
+
 ## 使用
 
 1. 运行 `release/LingtuOrderExport-0.1.8-Setup.exe`，安装后打开桌面的“灵兔 AI 电商平台买家订单导出工具”。
