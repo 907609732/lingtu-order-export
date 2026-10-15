@@ -7,20 +7,22 @@ export function readOrderPage(platform:string):any {
   const txt=(root:Element,sel:string)=>root.querySelector(sel)?.textContent?.trim()||''
   const attr=(root:Element,sel:string,name:string)=>root.querySelector(sel)?.getAttribute(name)||''
   const rows:any[]=[]
-  const roots=platform==='jd'?Array.from(document.querySelectorAll('tbody[id^="tb-"],.order-tb tbody')):platform==='taobao'?Array.from(document.querySelectorAll('[class*="index-mod__order-container"],.js-order-container,[data-id][class*="bought-wrapper"],.bought-wrapper-mod__table')):[]
+  const modern=platform==='jd'&&!!document.querySelector('[class*="selectContainer-"], [class*="orderCard-"]')
+  const roots=platform==='jd'?Array.from(document.querySelectorAll(modern?'[class*="orderCard-"]':'tbody[id^="tb-"],.order-tb tbody')):platform==='taobao'?Array.from(document.querySelectorAll('[class*="index-mod__order-container"],.js-order-container,[data-id][class*="bought-wrapper"],.bought-wrapper-mod__table')):[]
   for(const root of roots){
     const t=(root as HTMLElement).innerText||'';const id=(t.match(/订单(?:编号|号)[：:\s]*(\d[\d-]{7,})/)||[])[1]||root.id.replace(/^tb-/,'').match(/^\d{8,}$/)?.[0]||root.getAttribute('data-id')||''
     if(!id)continue
     const created=(t.match(/20\d{2}[-/]\d{1,2}[-/]\d{1,2}(?:\s+\d{2}:\d{2}:\d{2})?/)||[])[0]||''
-    const products=Array.from(root.querySelectorAll(platform==='jd'?'.goods-item':'[class*="item-mod__item"],.item'))
+    const products=Array.from(root.querySelectorAll(modern?'[class*="productItem-"]':platform==='jd'?'.goods-item':'[class*="item-mod__item"],.item'))
     const goods=(products.length?products:[root]).map((el:any,n:number)=>({id:(attr(el,'a[href*="item"]','href').match(/\/(\d+)\.html/)||[])[1]||String(n),title:txt(el,platform==='jd'?'.p-name a':'[class*="production-mod__production"] a span,.item-title,.title')||txt(el,'a[href*="item.htm"],a[href*="item.jd.com"]')||attr(el,'img','alt'),spec:txt(el,'.p-props,[class*="props"]'),quantity:Number(txt(platform==='jd'?el.closest('tr')||el:el,'.goods-number,.quantity').replace(/[^\d.]/g,''))||null,unitPriceFen:null,imageUrl:(attr(el,'img','data-lazy-img')||attr(el,'img','data-original')||attr(el,'img','src')).replace(/^\/\//,'https://'),productUrl:attr(el,'a[href*="item"]','href')}))
     const amount=txt(root,'.amount span,[class*="price-mod__real"]')||(t.match(/(?:实付|实付款|总额)[^\d]{0,8}([\d,.]+)/)||[])[1]||''
-    rows.push({id,createdAt:created,items:goods,paid:amount,shop:txt(root,'.shop-txt,.seller-mod__container,[class*="seller-mod"]'),status:txt(root,'.order-status,[class*="trade-status"]'),receiver:txt(root,'.consignee .txt'),detailUrl:attr(root,'a[href*="order_details"],a[href*="trade/detail"],a[href*="details.jd.com"]','href')})
+    if(modern)for(let i=0;i<goods.length;i++){const el=products[i];if(!el)continue;goods[i].title=txt(el,'[class*="productTitle-"]');goods[i].quantity=Number(txt(el,'[class*="countNum-"]'))||null;goods[i].spec=txt(el,'[class*="productSpec-"]')}
+    rows.push({id,createdAt:created,items:goods,paid:modern?txt(root,'[class*="priceRow-"]'):amount,shop:txt(root,modern?'[class*="shopNames-"]':'.shop-txt,.seller-mod__container,[class*="seller-mod"]'),status:txt(root,modern?'[class*="statusText-"]':'.order-status,[class*="trade-status"]'),receiver:txt(root,modern?'[class*="userName-"]':'.consignee .txt'),detailUrl:attr(root,'a[href*="order_details"],a[href*="trade/detail"],a[href*="details.jd.com"]','href')})
   }
   const next=Array.from(document.querySelectorAll('a,button,[role="button"]')).find(el=>visible(el)&&/^(下一页|下页|Next|›|>)$/.test(el.textContent?.trim()||'')&&!el.hasAttribute('disabled')&&el.getAttribute('aria-disabled')!=='true'&&!/disabled/.test(el.className||''))
-  const empty=/暂无订单|没有相关订单|没有找到符合条件|您还没有订单/.test(body)
+  const empty=/暂无订单|暂无相关订单|没有相关订单|没有找到符合条件|您还没有订单/.test(body)
   const ended=/没有更多订单|没有更多了|到底了/.test(body)
-  return {rows,blocked:false,hasNext:!!next,empty,ended,signature:rows.map(x=>x.id).join('|'),title:document.title}
+  return {rows,blocked:false,hasNext:!!next,empty,ended,signature:rows.map(x=>x.id).join('|'),title:document.title,modern,selectedRange:modern?txt(document.documentElement,'[class*="selectContainer-"] [class*="text-"]'):'',page:modern?Number(txt(document.documentElement,'[class*="activePage-"]')):undefined,totalPages:modern?Number(txt(document.documentElement,'[class*="totalText-"]').match(/\d+/)?.[0]):undefined}
 }
 export function advanceOrderPage():string {
   const next=Array.from(document.querySelectorAll('a,button,[role="button"]')).find(el=>(el as HTMLElement).offsetParent&&/^(下一页|下页|Next|›|>)$/.test(el.textContent?.trim()||'')&&!el.hasAttribute('disabled')&&el.getAttribute('aria-disabled')!=='true'&&!/disabled/.test(el.className||'')) as HTMLElement|undefined
