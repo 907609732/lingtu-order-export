@@ -248,12 +248,17 @@ export class Collector {
       for(let page=year===resume.year?(resume.nextPage||1):1,reads=0;reads<1000&&!this.stopped.has(task.id);page++,reads++){
         this.stage(task,{phase:'page',page,year})
         const url=new URL(platformById('jd').url);url.searchParams.set('d',year===currentYear?'2':String(year));url.searchParams.set('s','4096');url.searchParams.set('page',String(page))
-        await this.assertPlanAccount(view,'jd');await view.webContents.loadURL(url.href);await delay(1200);await this.assertPlanAccount(view,'jd');if(this.stopped.has(task.id))return
-        const snap=await view.webContents.executeJavaScript(`(${readOrderPage.toString()})('jd')`)
+        await this.assertPlanAccount(view,'jd');await this.navigateDetail(view,url.href);await delay(1200);await this.assertPlanAccount(view,'jd');if(this.stopped.has(task.id))return
+        let snap:any
+        for(let attempt=0;attempt<20&&!this.stopped.has(task.id);attempt++){
+          snap=await view.webContents.executeJavaScript(`(${readOrderPage.toString()})('jd')`)
+          if(snap.blocked||snap.rows.length||snap.empty)break
+          if(attempt<19)await delay(500)
+        }
         if(this.stopped.has(task.id))return
         if(snap.blocked)throw new CollectionError('login_or_verification')
-        if(!snap.rows.length&&!snap.empty)throw new Error('京东页面尚未识别到订单，请打开平台页检查登录或验证')
-        if(snap.rows.length&&snap.signature===signature)throw new Error('京东返回了重复页面，已有结果已保留，请检查平台筛选')
+        if(!snap.rows.length&&!snap.empty)throw new CollectionError('response_structure')
+        if(snap.rows.length&&snap.signature===signature)throw new CollectionError('response_structure')
         signature=snap.signature
         const rows:Order[]=snap.rows.map((r:any)=>({...base,...r,createdAt:dateText(r.createdAt),paidFen:moneyFen(r.paid),detailState:'pending',missing:['订单详情']}))
         this.store.add(task.id,rows);this.store.update(task.id,{pages:++pages,cursor:JSON.stringify(snap.hasNext&&!snap.empty?{year,nextPage:page+1}:{year:year-1,nextPage:1}),message:`正在读取京东 ${year} 年第 ${page} 页`});this.changed()

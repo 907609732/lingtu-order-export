@@ -1,0 +1,9 @@
+import {_electron as electron,expect} from '@playwright/test'
+import {mkdtemp} from 'node:fs/promises'
+import {resolve} from 'node:path'
+import assert from 'node:assert/strict'
+const root=await mkdtemp(resolve('.test-output/jd-collector-')),env={...process.env,ORDERDESK_TEST_DATA:root};delete env.ELECTRON_RUN_AS_NODE
+const app=await electron.launch({executablePath:resolve('node_modules/electron/dist/electron.exe'),args:['.'],env})
+try{const p=await app.firstWindow();await p.waitForFunction(()=>!!window.desk);await app.evaluate(({session})=>{globalThis.jdScenario='unknown';session.fromPartition('persist:orderdesk-jd').protocol.handle('https',()=>new Response(globalThis.jdScenario==='login'?'<title>京东-欢迎登录</title><body>扫码登录</body>':globalThis.jdScenario==='empty'?'<title>订单列表-京东商城</title><body>暂无订单</body>':'<title>订单列表-京东商城</title><body>新页面结构尚未支持</body>',{headers:{'content-type':'text/html;charset=utf-8'}}))});
+for(const mode of ['unknown','login','empty']){await app.evaluate((_,mode)=>{globalThis.jdScenario=mode},mode);const task=await p.evaluate(()=>window.desk.start({platform:'jd',from:'2026-10-01',to:'2026-10-15'}));await expect.poll(async()=>(await p.evaluate(()=>window.desk.state())).tasks.find(t=>t.id===task.id).status,{timeout:25000}).not.toBe('running');const result=(await p.evaluate(()=>window.desk.state())).tasks.find(t=>t.id===task.id);if(mode==='unknown'){assert.equal(result.status,'failed');assert.match(result.message,/结构/);assert.doesNotMatch(result.message,/需要登录/);assert.equal(result.listOutcome,'interrupted')}if(mode==='login'){assert.equal(result.status,'needs_login');assert.equal(result.listOutcome,'interrupted')}if(mode==='empty'){assert.equal(result.listOutcome,'complete');assert.equal(result.count,0)}}console.log(JSON.stringify({passed:true,unknownStructureNotLogin:true,realLoginStillBlocked:true,emptyCompletes:true}))
+}finally{await app.close()}
