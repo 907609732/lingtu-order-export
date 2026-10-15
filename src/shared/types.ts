@@ -28,7 +28,7 @@ export interface DeskAPI {
   login(platform: PlatformId): Promise<void>; pause(id: string): Promise<void>; resume(id: string): Promise<void>; finish(id: string): Promise<void>
   retry(id: string): Promise<void>; export(input: ExportInput): Promise<{ path: string; count: number; missing: number }>
   enrichDetails(taskId:string):Promise<void>; openOrder(taskId:string,orderId:string):Promise<void>
-  chooseDirectory(): Promise<string>; openOutput(): Promise<void>; openExport(id: string): Promise<void>; clear(platform: PlatformId): Promise<void>
+  chooseDirectory(): Promise<string>; openOutput(): Promise<void>; openExport(id: string): Promise<void>; clear(platform: PlatformId): Promise<boolean>
   proxyStart(platform: PlatformId): Promise<void>; proxyStop(): Promise<void>; certificate(): Promise<void>
   hidePage(): Promise<void>; proxySettings(): Promise<void>; onChange(callback: () => void): () => void
   setLogging(enabled: boolean): Promise<void>; openLogs(): Promise<void>

@@ -22,6 +22,7 @@ let off:(()=>void)|undefined;let offUpdate:(()=>void)|undefined;let refreshPendi
 async function refresh(){state.value=await desk.state();if(taskId.value)records.value=await desk.orders(taskId.value)}
 async function action(fn:()=>Promise<unknown>,message=''){busy.value=true;notice.value='';error.value=false;try{await fn();if(message)notice.value=message;await refresh()}catch(e){notice.value=String(e instanceof Error?e.message:e).replace(/^Error invoking remote method '[^']+': Error: /,'');error.value=true}finally{busy.value=false}}
 async function selectPlatform(id:PlatformId){if(state.value?.tasks.some(t=>t.status==='running'&&t.platform!==id)){notice.value='请先暂停当前平台的采集任务，再切换平台';error.value=true;return}await desk.hidePage();pageOpen.value=false;selected.value=id;section.value='export';const latest=state.value?.tasks.find(t=>t.platform===id);taskId.value=latest?.id||'';if(latest){from.value=latest.from;to.value=latest.to}query.value='';page.value=1;records.value=taskId.value?await desk.orders(taskId.value):[]}
+async function clearPlatform(){const id=selected.value,name=platform.value?.name;await action(async()=>{if(await desk.clear(id)){if(selected.value===id){taskId.value='';records.value=[];query.value='';page.value=1}notice.value=`已清理 ${name} 的本机采集缓存，已导出的文件保留。`}})}
 async function openPage(){await action(async()=>{await desk.login(selected.value);pageOpen.value=true})}
 async function hidePage(){await desk.hidePage();pageOpen.value=false}
 async function start(){await action(async()=>{const t=await desk.start({platform:selected.value,from:from.value,to:to.value});taskId.value=t.id;page.value=1;await nextTick();executionPanel.value?.reveal()})}
@@ -54,7 +55,7 @@ onUnmounted(()=>{off?.();offUpdate?.()})
       <div class="content" :class="section">
         <div v-if="notice" class="notice" :class="{error}">{{notice}}<button @click="notice=''">×</button></div>
         <template v-if="section==='export'">
-          <div class="page-title"><div><div class="eyebrow">ORDER EXPORT</div><h1>{{platform?.name}}订单导出</h1><p>选择日期，读取买家订单，再保存到你的电脑。</p></div><button class="secondary" @click="pageOpen?hidePage():openPage()" :disabled="busy">{{pageOpen?'返回导出台':platform?.mode==='proxy'?'打开平台页面':'登录 / 查看平台页'}}</button></div>
+          <div class="page-title"><div><div class="eyebrow">ORDER EXPORT</div><h1>{{platform?.name}}订单导出</h1><p>选择日期，读取买家订单，再保存到你的电脑。</p></div><div class="button-row"><button v-if="!pageOpen" class="secondary danger" :disabled="busy||!state||state.tasks.some(t=>t.status==='running')" :title="`清理 ${platform?.name} 的本机任务和订单记录，不删除已导出文件`" @click="clearPlatform">清理当前平台缓存</button><button class="secondary" @click="pageOpen?hidePage():openPage()" :disabled="busy">{{pageOpen?'返回导出台':platform?.mode==='proxy'?'打开平台页面':'登录 / 查看平台页'}}</button></div></div>
           <div v-if="pageOpen" class="browser-placeholder"><p>请在下方的官方平台页面完成登录。完成后点击右上角“返回导出台”。</p></div>
           <template v-else>
             <section v-if="platform?.mode==='proxy'" class="proxy-guide">
@@ -95,7 +96,6 @@ onUnmounted(()=>{off?.();offUpdate?.()})
             <div class="logging-folder"><button class="secondary" :disabled="busy" @click="action(()=>desk.openLogs())">打开日志文件夹</button><span class="path" :title="state?.logging.directory">{{state?.logging.directory}}</span></div>
           </section>
           <section class="settings-card"><h2>导出文件夹</h2><p class="path">{{state?.outputDir||'还未选择，首次导出前设置即可'}}</p><div class="button-row"><button class="primary" @click="choose">选择文件夹</button><button class="secondary" :disabled="!state?.outputDir" @click="action(()=>desk.openOutput())">打开文件夹</button></div></section>
-          <section class="settings-card"><h2>本机采集数据</h2><p>任务和订单持续保存在这台电脑。清理不会删除你已经导出的文件。</p><div class="button-row"><select v-model="selected"><option v-for="p in state?.platforms" :value="p.id">{{p.name}}</option></select><button class="secondary danger" @click="action(()=>desk.clear(selected),'已完成清理操作')">清理所选平台缓存</button></div></section>
           <section class="settings-card"><h2>当前验证状态</h2><p>开发验证版。程序安装、样例解析和文件生成，与真实平台采集验收分别记录。请先使用短日期范围核对订单。</p></section>
           <section class="settings-card about-card"><h2>关于</h2><p class="about-brand">灵兔 AI 电商平台买家订单导出工具 <span class="by">BY 五成</span></p><div class="button-row"><button class="secondary" :disabled="busy" @click="openWebsite">访问官网 ↗</button><button class="secondary" :disabled="busy" @click="checkUpdate">检查更新</button></div><p v-if="state?.update" class="update-tip">发现新版本 v{{state.update.latest}}，<a href="#" @click.prevent="openUpdate">前往下载</a></p></section>
         </template>

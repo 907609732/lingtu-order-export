@@ -89,7 +89,7 @@ app.whenReady().then(async()=>{
   })
   bind('openOutput',async()=>{const dir=store.setting('outputDir');if(dir)await shell.openPath(dir)})
   bind('openExport',(id:string)=>{const path=store.get(id).exportedPath;const dir=store.setting('outputDir');if(path&&dir&&resolve(path).startsWith(resolve(dir)+sep))shell.showItemInFolder(path)})
-  bind('clear',async(id:PlatformId)=>{idle();target(id);collector.hide();const r=await dialog.showMessageBox(win,{type:'warning',title:'清理本机采集记录',message:`清理 ${platformById(id).name} 的采集缓存和任务记录？`,detail:'已经导出的文件和平台上的订单不会删除。此操作不能撤销。',buttons:['保留','清理缓存'],defaultId:0,cancelId:0});if(r.response===1){store.clear(id);change()}})
+  bind('clear',async(id:PlatformId)=>{idle();target(id);collector.hide();const r=await dialog.showMessageBox(win,{type:'warning',title:'清理本机采集记录',message:`清理 ${platformById(id).name} 的采集缓存和任务记录？`,detail:'已经导出的文件和平台上的订单不会删除。此操作不能撤销。',buttons:['保留','清理缓存'],defaultId:0,cancelId:0});if(r.response===1){store.clear(id);change();return true}return false})
   bind('proxyStart',async(id:PlatformId)=>{target(id);if(platformById(id).mode!=='proxy')throw new Error('此平台使用软件内登录');await proxy.start(id);change()})
   bind('proxyStop',()=>{proxy.stop();change()})
   bind('certificate',async()=>{if(!proxy.running)throw new Error('请先开启辅助采集');await shell.openPath(proxy.certificate)})
