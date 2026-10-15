@@ -2,7 +2,6 @@ import { app,BrowserWindow,dialog,ipcMain,Menu,shell,nativeImage } from 'electro
 import { dirname,join,resolve,sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { mkdir,readFile,writeFile } from 'node:fs/promises'
-import { cpSync,existsSync,mkdirSync,renameSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { Store } from '../core/store'
 import { exportOrders } from '../core/exporter'
@@ -16,16 +15,11 @@ import type { ExportInput,PlatformId,StartInput,UpdateInfo } from '../shared/typ
 import { WEBSITE_URL } from '../shared/config'
 import { checkLatest,compareVersions } from './updater'
 import { reportLaunch } from './analytics'
+import {chooseUserData} from './user-data'
 const root=dirname(fileURLToPath(import.meta.url))
-// 首次启动时把旧版本的数据目录整体迁移到新目录，迁移成功后固定使用新目录。
-function migrateUserData(from:string,to:string){
-  if(!existsSync(from)||existsSync(to))return
-  try{mkdirSync(dirname(to),{recursive:true});renameSync(from,to);return}catch{}
-  try{cpSync(from,to,{recursive:true})}catch{}
-}
 app.setName('灵兔 AI 电商平台买家订单导出工具')
 if(process.env.ORDERDESK_TEST_DATA)app.setPath('userData',resolve(process.env.ORDERDESK_TEST_DATA))
-else{const dataDir=join(app.getPath('appData'),'灵兔 AI 电商平台买家订单导出工具');migrateUserData(join(app.getPath('appData'),'灵兔电商平台买家订单导出工具'),dataDir);migrateUserData(join(app.getPath('appData'),'五成电商订单导出助手'),dataDir);migrateUserData(join(app.getPath('appData'),'买家订单导出台'),dataDir);app.setPath('userData',dataDir)}
+else app.setPath('userData',chooseUserData(app.getPath('appData')))
 let store:Store,collector:Collector,proxy:OrderProxy,win:BrowserWindow,diagnostics:Diagnostics,journal:ExecutionLog;let exporting=false
 let latestUpdate:UpdateInfo|null=null
 let logNotification:ReturnType<typeof setTimeout>|undefined
@@ -78,10 +72,12 @@ app.whenReady().then(async()=>{
   bind('login',async(id:PlatformId)=>{target(id);diagnostics.event('platform.open',{platform:id});await collector.show(id)})
   bind('hidePage',()=>collector.hide())
   bind('start',(input:StartInput)=>{idle();target(input.platform);const task=store.create(input);run(task.id);change();return task})
+  bind('enrichDetails',(id:string)=>{idle();const task=store.get(id);if(task.platform!=='taobao'||!task.count)throw new Error('请先采集淘宝订单列表');void collector.enrichTaobao(task).catch(error=>{diagnostics.event('collector.failed',{taskId:id,platform:task.platform},error);store.update(id,{status:'partial',message:'详情读取暂时中断，已有订单已保留'});change()})})
+  bind('openOrder',async(id:string,orderId:string)=>{idle();const order=store.orders(id).find(o=>o.id===orderId);if(!order)throw new Error('订单不存在');await collector.openOrder(order)})
   const taskAction=(id:string,action:string)=>diagnostics.event('task.action',{taskId:id,platform:store.get(id).platform,action})
   bind('pause',(id:string)=>{collector.stop(id);store.update(id,{status:'paused',message:'已暂停，当前结果已保存在本机'});taskAction(id,'pause');change()})
   bind('resume',(id:string)=>{idle();store.update(id,{status:'running',message:'正在继续采集'});taskAction(id,'resume');run(id);change()})
-  bind('retry',(id:string)=>{idle();store.update(id,{status:'running',message:'正在重新检查订单和详情',cursor:''});taskAction(id,'retry');run(id);change()})
+  bind('retry',(id:string)=>{idle();store.update(id,{status:'running',operation:'list',message:'正在重新检查订单和详情',cursor:''});taskAction(id,'retry');run(id);change()})
   bind('finish',(id:string)=>{collector.stop(id);store.update(id,{status:'partial',message:'已结束本次读取；仅代表已获取的记录，平台完整范围未自动验证'});taskAction(id,'finish');change()})
   bind('chooseDirectory',async()=>{collector.hide();const result=await dialog.showOpenDialog(win,{title:'选择订单导出目录',properties:['openDirectory','createDirectory'],defaultPath:store.setting('outputDir')||app.getPath('documents')});if(result.canceled)return store.setting('outputDir');store.setting('outputDir',result.filePaths[0]);change();return result.filePaths[0]})
   bind('export',async(input:ExportInput)=>{
@@ -102,7 +98,7 @@ app.whenReady().then(async()=>{
   bind('openUpdate',()=>{if(latestUpdate?.url)shell.openExternal(latestUpdate.url)})
   bind('openWebsite',()=>{if(WEBSITE_URL)shell.openExternal(WEBSITE_URL)})
   // 后台记录启动、上报日活、检查更新；均不影响正常使用，失败静默。
-  void (async()=>{const installId=store.installId();store.logLaunch(app.getVersion());await reportLaunch(installId,app.getVersion());const latest=await checkLatest();if(latest&&compareVersions(latest.latest,app.getVersion())>0){latestUpdate={...latest,current:app.getVersion()};if(win&&!win.isDestroyed())win.webContents.send('desk:updateAvailable',latestUpdate)}})()
+  if(!process.env.ORDERDESK_TEST_DATA)void (async()=>{const installId=store.installId();store.logLaunch(app.getVersion());await reportLaunch(installId,app.getVersion());const latest=await checkLatest();if(latest&&compareVersions(latest.latest,app.getVersion())>0){latestUpdate={...latest,current:app.getVersion()};if(win&&!win.isDestroyed())win.webContents.send('desk:updateAvailable',latestUpdate)}})()
   win.once('ready-to-show',()=>win.show())
   if(process.env.ELECTRON_RENDERER_URL)await win.loadURL(process.env.ELECTRON_RENDERER_URL);else await win.loadFile(join(root,'../renderer/index.html'))
   win.show()

@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed,nextTick,onMounted,onUnmounted,ref,watch } from 'vue'
 import type { ExecutionEntry,PlatformId } from '../../shared/types'
-const props=defineProps<{platform:PlatformId}>()
+const props=defineProps<{platform:PlatformId;compact?:boolean}>()
+const collapsed=ref(!!props.compact)
 const panel=ref<HTMLElement>()
-defineExpose({reveal:()=>panel.value?.scrollIntoView({block:'nearest',behavior:'smooth'})})
+defineExpose({reveal:()=>{collapsed.value=false;void nextTick(()=>panel.value?.scrollIntoView({block:'nearest',behavior:'smooth'}))}})
+watch(()=>props.compact,value=>{collapsed.value=!!value})
 const entries=ref<ExecutionEntry[]>([]),follow=ref(true),box=ref<HTMLElement>(),hint=ref('')
 const labels={info:'进行',success:'成功',warning:'提示',error:'错误'}
 const current=computed(()=>entries.value.at(-1)?.message||'等待操作…')
@@ -21,14 +23,14 @@ onUnmounted(()=>{disposed=true;off?.();if(timer)clearTimeout(timer)})
 </script>
 
 <template>
-  <section ref="panel" class="execution-panel" aria-label="执行日志面板">
+  <section ref="panel" class="execution-panel" :class="{collapsed}" aria-label="执行日志面板">
     <div class="execution-heading"><div><h2>执行日志 <span class="execution-live">实时</span></h2><p>按时间显示执行步骤 · 最近 300 条 · 仅当前平台</p></div><div class="execution-tools"><label><input v-model="follow" type="checkbox">自动滚动</label><button class="secondary" :disabled="!entries.length" @click="copy">复制日志</button></div></div>
-    <div class="execution-current"><span>当前步骤</span><strong>{{current}}</strong></div>
-    <div ref="box" class="execution-console" role="log" aria-label="实时执行日志" aria-live="polite" aria-relevant="additions text" tabindex="0" @scroll="onScroll">
+    <div class="execution-current"><span>当前步骤</span><strong>{{current}}</strong><button class="text-button" :aria-expanded="!collapsed" @click="collapsed=!collapsed">{{collapsed?'展开日志 ▾':'收起日志 ▴'}}</button></div>
+    <div v-show="!collapsed" ref="box" class="execution-console" role="log" aria-label="实时执行日志" aria-live="polite" aria-relevant="additions text" tabindex="0" @scroll="onScroll">
       <div v-if="!entries.length" class="execution-empty">等待操作…开始采集后，这里会显示读取页数、订单数量和处理结果。</div>
       <div v-for="entry in entries" :key="entry.id" class="execution-line" :class="entry.level"><time>{{time(entry.time)}}</time><span class="execution-level">{{labels[entry.level]}}</span><span>{{entry.message}}</span></div>
     </div>
-    <div class="execution-footer"><span>{{hint||'界面日志保留本次运行的最近记录；需要留存时可复制，或在设置中开启文件日志。'}}</span><button v-if="!follow" class="text-button" @click="follow=true">回到最新 ↓</button></div>
+    <div v-show="!collapsed||hint" class="execution-footer"><span>{{hint||'界面日志保留本次运行的最近记录；需要留存时可复制，或在设置中开启文件日志。'}}</span><button v-if="!follow" class="text-button" @click="follow=true">回到最新 ↓</button></div>
   </section>
 </template>
 

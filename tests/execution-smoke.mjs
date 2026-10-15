@@ -17,7 +17,7 @@ const response=page=>({data:{data:{
 async function launch(){app=await electron.launch({executablePath:resolve('node_modules/electron/dist/electron.exe'),args:['.'],env,timeout:45000});const page=await app.firstWindow();await page.getByRole('heading',{name:'淘宝 / 天猫订单导出'}).waitFor();return page}
 try{
   let page=await launch()
-  const live=page.getByRole('log',{name:'实时执行日志'})
+  const live=page.getByRole('log',{name:'实时执行日志',includeHidden:true})
   await expect(live).toContainText('程序已启动')
   assert.equal((await page.evaluate(()=>window.desk.state())).logging.enabled,false)
   await app.evaluate(({session},{first,second})=>{
@@ -29,6 +29,7 @@ try{
   await page.getByLabel('开始日期').fill('2026-10-01');await page.getByLabel('结束日期').fill('2026-10-02')
   await page.getByRole('button',{name:'开始采集'}).click()
   await expect(live).toContainText('正在读取2026 年10 月第 1 页订单')
+  await expect(live).toBeVisible()
   assert.equal((await page.evaluate(()=>window.desk.state())).tasks[0].status,'running')
   await expect(live).toContainText('已等待 10 秒',{timeout:22000})
   await page.screenshot({path:join(root,'live-wait.png')})

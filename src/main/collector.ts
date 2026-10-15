@@ -14,6 +14,7 @@ import { taobaoListData, taobaoMonths, taobaoNextPage } from './taobao-contract'
 import { parsePddList, parsePddDetailHtml } from './pdd-contract'
 import { pddPageRequest, pddDetailRequest } from './pdd-page'
 import { normalizePddDetail } from '../core/pdd-normalize'
+import {taobaoDetailUrl,readTaobaoDetailPage,mergeTaobaoVisibleDetail} from './taobao-detail'
 export class Collector {
   views=new Map<PlatformId,WebContentsView>(); current?:WebContentsView; active?:string; stopped=new Set<string>(); runs=new Set<string>(); private captureCount=0; private disposing=false
   constructor(private win:BrowserWindow,private store:Store,private changed:()=>void,private diagnostics:Diagnostics){win.on('resize',()=>this.layout())}
@@ -24,7 +25,53 @@ export class Collector {
     return unwrapMtopResponse(result)
   }
   private pageRead(task:Task,page:number,received:number,extra:Record<string,unknown>={}){this.diagnostics.event('collector.page',{platform:task.platform,taskId:task.id,page,received,count:this.store.get(task.id).count,...extra})}
-  layout(){if(this.current){const [w,h]=this.win.getContentSize();this.current.setBounds({x:244,y:174,width:Math.max(300,w-268),height:Math.max(200,h-196)})}}
+  layout(){if(this.current){const [w,h]=this.win.getContentSize();this.current.setBounds({x:184,y:146,width:Math.max(300,w-200),height:Math.max(200,h-162)})}}
+  async openOrder(order:Order){
+    const url=order.platform==='taobao'?taobaoDetailUrl(order.detailUrl,order.id):order.detailUrl
+    let parsed:URL;try{parsed=new URL(url)}catch{throw new Error('此订单尚未取得平台详情链接')}
+    if(parsed.protocol!=='https:'||parsed.username||parsed.password||parsed.port||!allowedHost(order.platform,parsed.hostname)||/create|submit|cancel|delete|confirm|payorder/i.test(parsed.pathname))throw new Error('此订单详情链接暂不支持打开')
+    const view=await this.ensure(order.platform);await this.navigateDetail(view,url)
+    this.hide();this.current=view;this.win.contentView.addChildView(view);this.layout()
+  }
+  private async navigateDetail(view:WebContentsView,url:string){
+    await Promise.race([view.webContents.loadURL(url).catch(error=>{if(error?.errno!==-3&&error?.code!=='ERR_ABORTED')throw new CollectionError('network')}),delay(20000).then(()=>{throw new CollectionError('timeout')})])
+  }
+  async enrichTaobao(task:Task):Promise<void>{
+    if(this.runs.size)throw new Error('上一个采集任务正在结束，请稍后再试')
+    if(task.platform!=='taobao')throw new Error('此操作目前适用于淘宝订单')
+    this.runs.add(task.id);this.stopped.delete(task.id);this.active=task.id
+    const orders=this.store.orders(task.id),started=Date.now();let read=0,failed=0,interrupted=false
+    this.store.update(task.id,{status:'running',operation:'details',message:'正在读取淘宝订单详情'});this.changed()
+    this.diagnostics.event('collector.start',{platform:task.platform,taskId:task.id,count:orders.length})
+    this.progress.set(task.id,new ExecutionProgress(this.diagnostics,'collector',{platform:task.platform,taskId:task.id}))
+    try{
+      this.stage(task,{phase:'platform'});const view=await this.ensure('taobao')
+      for(let i=0;i<orders.length&&!this.stopped.has(task.id);i++){
+        this.stage(task,{phase:'detail',current:i+1,total:orders.length})
+        this.store.update(task.id,{message:`正在提取淘宝订单详情 ${i+1} / ${orders.length}`});this.changed()
+        try{
+          const url=taobaoDetailUrl(orders[i].detailUrl,orders[i].id)
+          await this.navigateDetail(view,url)
+          let merged:Order|undefined,lastError:unknown,previous='',stable=0
+          for(let attempt=0;attempt<40&&!this.stopped.has(task.id);attempt++){
+            const snap=await view.webContents.executeJavaScript(`(${readTaobaoDetailPage.toString()})()`)
+            try{const candidate=mergeTaobaoVisibleDetail(orders[i],snap);const signature=JSON.stringify({...candidate,capturedAt:''});stable=signature===previous?stable+1:0;previous=signature;merged=candidate;if(stable>=3)break}catch(error){merged=undefined;stable=0;previous='';lastError=error;if(error instanceof CollectionError&&error.category==='login_or_verification')throw error}
+            await delay(250)
+          }
+          if(this.stopped.has(task.id))return
+          if(!merged)throw lastError||new CollectionError('response_structure')
+          this.store.add(task.id,[merged]);read++;this.changed()
+          this.diagnostics.event('collector.detail',{platform:'taobao',taskId:task.id,current:i+1,total:orders.length})
+        }catch(error){
+          if(error instanceof CollectionError&&error.category==='login_or_verification')throw error
+          failed++;this.diagnostics.event('collector.detail_failed',{platform:'taobao',taskId:task.id,current:i+1,total:orders.length},error,'warn')
+        }
+        if(i+1<orders.length)await delay(900)
+      }
+      if(!this.stopped.has(task.id))this.store.update(task.id,{status:'partial',message:`详情读取结束：${read} 笔取得可见字段${failed?`，${failed} 笔暂未识别`:''}；未获取字段仍待核对，已有结果可导出`})
+    }catch(error){interrupted=true;this.diagnostics.event('collector.failed',{platform:'taobao',taskId:task.id},error);if(!this.stopped.has(task.id))this.store.update(task.id,{status:error instanceof CollectionError&&error.category==='login_or_verification'?'needs_login':'partial',message:error instanceof CollectionError?error.message:'详情读取暂时中断，已有订单已保留，请重试'})}
+    finally{this.runs.delete(task.id);if(this.active===task.id)this.active=undefined;this.progress.get(task.id)?.close();this.progress.delete(task.id);const latest=this.store.get(task.id);this.diagnostics.event('collector.end',{platform:'taobao',taskId:task.id,status:latest.status,count:latest.count,interrupted,durationMs:Date.now()-started});this.changed()}
+  }
   hide(){if(this.current){this.win.contentView.removeChildView(this.current);this.current=undefined}}
   async show(id:PlatformId):Promise<void>{
     const loading=this.ensure(id)
@@ -68,6 +115,7 @@ export class Collector {
   }
   stop(id:string){this.diagnostics.event('collector.stop',{taskId:id});this.progress.get(id)?.close();this.progress.delete(id);this.stopped.add(id);if(this.active===id)this.active=undefined}
   async run(task:Task):Promise<void>{
+    if(task.operation==='details')return this.enrichTaobao(task)
     if(this.runs.size)throw new Error('上一个采集任务正在结束，请稍后再试')
     this.runs.add(task.id);this.stopped.delete(task.id);this.active=task.id
     const started=Date.now();let interrupted=false;this.diagnostics.event('collector.start',{platform:task.platform,taskId:task.id,count:task.count,pages:task.pages})
@@ -142,6 +190,7 @@ export class Collector {
     if(!this.stopped.has(task.id)){this.store.update(task.id,{status:'partial',message:'京东所选年份列表已读取，订单详情和平台完整范围仍需核对'});this.changed()}
   }
   async runTaobao(task:Task,view:WebContentsView){
+    if(!view.webContents.getURL().startsWith('https://buyertrade.taobao.com/trade/itemlist/'))await this.navigateDetail(view,platformById('taobao').url)
     const months=taobaoMonths(task.from,task.to)
     let start=0,firstPage=1,reads=0
     if(task.cursor)try{const c=JSON.parse(task.cursor);if(months.includes(c.month)&&Number.isSafeInteger(c.nextPage)&&c.nextPage>0){start=months.indexOf(c.month);firstPage=c.nextPage}}catch{}
