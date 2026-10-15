@@ -2,6 +2,7 @@
 import { computed,nextTick,onMounted,onUnmounted,ref } from 'vue'
 import type { AppState,Order,PlatformId,Task } from '../../shared/types'
 import ExecutionLog from './ExecutionLog.vue'
+import logoUrl from './assets/logo.png'
 const desk = window.desk
 const executionPanel=ref<InstanceType<typeof ExecutionLog>>()
 const state=ref<AppState|null>(null), selected=ref<PlatformId>('taobao'), taskId=ref(''), records=ref<Order[]>([])
@@ -38,7 +39,7 @@ onUnmounted(()=>{off?.();offUpdate?.()})
 <template>
   <div class="app-shell">
     <aside class="sidebar">
-      <div class="brand"><div class="brand-symbol">▤</div><div><strong>订单导出台</strong><span>你的订单，集中导出</span></div></div>
+      <div class="brand"><img class="brand-logo" :src="logoUrl" alt="灵兔 AI 电商平台买家订单导出工具" /></div>
       <div class="nav-label">购物平台 <span>{{ state?.platforms.length || 9 }}</span></div>
       <nav><button v-for="p in state?.platforms" :key="p.id" class="platform" :class="{ selected:p.id===selected && section==='export' }" @click="selectPlatform(p.id)"><i :style="{color:p.color,background:p.color+'13'}">{{p.icon}}</i><span>{{p.name}}</span><b v-if="p.id===selected && section==='export'">›</b></button></nav>
       <div class="side-bottom"><button :class="{active:section==='history'}" @click="navigate('history')">◷ <span>导出任务</span><small>{{state?.tasks.length||0}}</small></button><button :class="{active:section==='help'}" @click="navigate('help')">❓ <span>使用教程</span></button><button :class="{active:section==='settings'}" @click="navigate('settings')">⚙ <span>保存与设置</span></button><div class="local-badge"><span class="dot"></span> 数据保存在这台电脑</div></div>

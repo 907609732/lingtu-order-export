@@ -1,6 +1,6 @@
 {
   "name": "lingtu-order-export",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "灵兔 AI 电商平台买家订单导出",
   "author": "Local Order Desk",
   "private": true,
@@ -44,6 +44,7 @@
     },
     "files": [
       "out/**",
+      "build/icon.png",
       "package.json"
     ],
     "asar": true,
@@ -51,7 +52,8 @@
       "target": [
         "nsis"
       ],
-      "artifactName": "LingtuOrderExport-${version}-Setup.${ext}"
+      "artifactName": "LingtuOrderExport-${version}-Setup.${ext}",
+      "icon": "icon.ico"
     },
     "nsis": {
       "oneClick": false,

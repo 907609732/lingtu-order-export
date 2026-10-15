@@ -5,4 +5,5 @@ release/
 .research/
 .test-output/
 .plastic/
+.workbuddy/
 *.log
