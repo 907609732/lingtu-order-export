@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed,nextTick,onMounted,onUnmounted,ref } from 'vue'
 import type { AppState,Order,PlatformId,Task } from '../../shared/types'
+import ExtractionPlan from './ExtractionPlan.vue'
+import {planPlatforms,pendingDetails,shouldHighlightDetails} from '../../core/extraction-plan'
+import type {PlanInput} from '../../shared/types'
 import ExecutionLog from './ExecutionLog.vue'
 import OrderTable from './OrderTable.vue'
 import {Clock,QuestionFilled,Setting,Lock} from '@element-plus/icons-vue'
@@ -10,6 +13,9 @@ const executionPanel=ref<InstanceType<typeof ExecutionLog>>()
 const state=ref<AppState|null>(null), selected=ref<PlatformId>('taobao'), taskId=ref(''), records=ref<Order[]>([])
 const today=new Date(Date.now()+8*3600000).toISOString().slice(0,10)
 const from=ref(today.slice(0,7)+'-01'),to=ref(today),format=ref<'xlsx'|'csv'>('xlsx'),images=ref(true),busy=ref(false),pageOpen=ref(false),section=ref<'export'|'history'|'settings'|'help'>('export'),query=ref(''),page=ref(1),notice=ref(''),error=ref(false)
+const planOpen=ref(false)
+const detailPending=computed(()=>pendingDetails(records.value).length)
+const detailHighlight=computed(()=>shouldHighlightDetails(task.value,records.value))
 const platform=computed(()=>state.value?.platforms.find(p=>p.id===selected.value))
 const tasks=computed(()=>state.value?.tasks.filter(t=>t.platform===selected.value)||[])
 const task=computed(()=>state.value?.tasks.find(t=>t.id===taskId.value))
@@ -21,11 +27,12 @@ const labels:Record<string,string>={running:'正在采集',paused:'已暂停',ne
 let off:(()=>void)|undefined;let offUpdate:(()=>void)|undefined;let refreshPending=false
 async function refresh(){state.value=await desk.state();if(taskId.value)records.value=await desk.orders(taskId.value)}
 async function action(fn:()=>Promise<unknown>,message=''){busy.value=true;notice.value='';error.value=false;try{await fn();if(message)notice.value=message;await refresh()}catch(e){notice.value=String(e instanceof Error?e.message:e).replace(/^Error invoking remote method '[^']+': Error: /,'');error.value=true}finally{busy.value=false}}
-async function selectPlatform(id:PlatformId){if(state.value?.tasks.some(t=>t.status==='running'&&t.platform!==id)){notice.value='请先暂停当前平台的采集任务，再切换平台';error.value=true;return}await desk.hidePage();pageOpen.value=false;selected.value=id;section.value='export';const latest=state.value?.tasks.find(t=>t.platform===id);taskId.value=latest?.id||'';if(latest){from.value=latest.from;to.value=latest.to}query.value='';page.value=1;records.value=taskId.value?await desk.orders(taskId.value):[]}
+async function selectPlatform(id:PlatformId){planOpen.value=false;if(state.value?.tasks.some(t=>t.status==='running'&&t.platform!==id)){notice.value='请先暂停当前平台的采集任务，再切换平台';error.value=true;return}await desk.hidePage();pageOpen.value=false;selected.value=id;section.value='export';const latest=state.value?.tasks.find(t=>t.platform===id);taskId.value=latest?.id||'';if(latest){from.value=latest.from;to.value=latest.to}query.value='';page.value=1;records.value=taskId.value?await desk.orders(taskId.value):[]}
 async function clearPlatform(){const id=selected.value,name=platform.value?.name;await action(async()=>{if(await desk.clear(id)){if(selected.value===id){taskId.value='';records.value=[];query.value='';page.value=1}notice.value=`已清理 ${name} 的本机采集缓存，已导出的文件保留。`}})}
 async function openPage(){await action(async()=>{await desk.login(selected.value);pageOpen.value=true})}
 async function hidePage(){await desk.hidePage();pageOpen.value=false}
 async function start(){await action(async()=>{const t=await desk.start({platform:selected.value,from:from.value,to:to.value});taskId.value=t.id;page.value=1;await nextTick();executionPanel.value?.reveal()})}
+async function startPlan(input:{from:string;to:string;plan:PlanInput}){await action(async()=>{const t=await desk.start({platform:selected.value,...input});taskId.value=t.id;from.value=t.from;to.value=t.to;page.value=1;planOpen.value=false;await nextTick();executionPanel.value?.reveal()})}
 async function enrich(){await action(async()=>{await desk.enrichDetails(taskId.value);await nextTick();executionPanel.value?.reveal()})}
 async function openOrder(orderId:string){await action(async()=>{await desk.openOrder(taskId.value,orderId);pageOpen.value=true})}
 async function chooseTask(event:Event){const id=(event.target as HTMLSelectElement).value,t=tasks.value.find(t=>t.id===id);if(t)await openTask(t)}
@@ -43,7 +50,7 @@ onUnmounted(()=>{off?.();offUpdate?.()})
 </script>
 
 <template>
-  <div class="app-shell" :class="{'data-workspace':section==='export'}">
+  <div class="app-shell" :style="{'--workspace-extra-height':`${(task?.plan?36:0)+(detailHighlight?40:0)}px`}" :class="{'data-workspace':section==='export'}">
     <aside class="sidebar">
       <div class="brand"><img class="brand-logo" :src="logoUrl" alt="灵兔 Logo" /><div><strong>灵兔 <span>AI</span></strong><small>电商订单工作台</small></div></div>
       <div class="nav-label">购物平台 <span>{{ state?.platforms.length || 9 }}</span></div>
@@ -56,7 +63,7 @@ onUnmounted(()=>{off?.();offUpdate?.()})
         <div v-if="notice" class="notice" :class="{error}">{{notice}}<button @click="notice=''">×</button></div>
         <template v-if="section==='export'">
           <div class="page-title export-title"><div class="platform-heading"><div class="eyebrow">ORDER EXPORT</div><h1>{{platform?.name}}订单导出</h1><p>选择日期，读取买家订单，再保存到你的电脑。</p></div><section v-if="!pageOpen" class="compact-controls header-controls" aria-label="采集与导出操作">
-              <div class="form-row"><label>开始日期<input v-model="from" type="date" :max="to"></label><span class="range-dash">—</span><label>结束日期<input v-model="to" type="date" :min="from"></label><div class="quick-date"><button @click="from=today.slice(0,7)+'-01';to=today">本月</button><button @click="from=today.slice(0,4)+'-01-01';to=today">今年</button></div><div class="collection-actions"><button v-if="task?.status!=='running'" class="primary start" :disabled="busy" @click="start">开始采集</button><button class="secondary" v-if="task && task.status==='running'" @click="action(()=>desk.pause(taskId))">暂停</button><button class="secondary" v-if="task && ['paused','needs_login','failed'].includes(task.status)" @click="action(()=>desk.resume(taskId))">继续采集</button><button class="text-button" v-if="task && task.status==='partial'" :disabled="busy" @click="action(()=>desk.retry(taskId))">重试采集</button><button v-if="selected==='taobao'" class="secondary" :disabled="!records.length||busy||task?.status==='running'" @click="enrich">提取订单详情</button><button class="primary" :disabled="!records.length||busy||task?.status==='running'" title="导出本任务全部订单，表格筛选不改变导出范围" @click="exportFile">{{busy?'处理中…':'导出文件'}} ↓</button><button v-if="task?.status==='running'" class="text-button" @click="action(()=>desk.finish(taskId))">结束读取</button><details class="export-options"><summary>导出设置 ▾</summary><div class="export-options-panel"><label class="inline-label">文件格式<select v-model="format"><option value="xlsx">Excel (.xlsx)</option><option value="csv">CSV (.csv)</option></select></label><label class="checkbox"><input v-model="images" type="checkbox" :disabled="format==='csv'">嵌入商品图片</label><button class="text-button" @click="choose">{{state?.outputDir?'更改保存目录':'选择保存目录'}} ↗</button><p :title="state?.outputDir">{{state?.outputDir||'首次导出时选择保存目录'}}</p></div></details></div></div>
+              <div class="form-row"><label>开始日期<input v-model="from" type="date" :max="to"></label><span class="range-dash">—</span><label>结束日期<input v-model="to" type="date" :min="from"></label><div class="quick-date"><button @click="from=today.slice(0,7)+'-01';to=today">本月</button><button @click="from=today.slice(0,4)+'-01-01';to=today">今年</button></div><div class="collection-actions"><button v-if="planPlatforms.includes(selected)" class="secondary plan-button" :disabled="busy" @click="planOpen=true">{{task?.plan?'计划进度':'提取计划'}}</button><button v-if="task?.status!=='running'" class="primary start" :disabled="busy" @click="start">开始采集</button><button class="secondary" v-if="task && task.status==='running'" @click="action(()=>desk.pause(taskId))">暂停</button><button class="secondary" v-if="task && ['paused','needs_login','failed'].includes(task.status)" @click="action(()=>desk.resume(taskId))">继续采集</button><button class="text-button" v-if="task && task.status==='partial'" :disabled="busy" @click="action(()=>desk.retry(taskId))">重试采集</button><button v-if="selected==='taobao'" :class="['secondary',{'detail-highlight':detailHighlight}]" :disabled="!detailPending||busy||task?.status==='running'" :title="detailHighlight?'列表已采集完成，请提取详情':'提取尚未成功读取的官方订单详情'" @click="enrich">提取订单详情<span v-if="detailPending"> · {{detailPending}}</span></button><button class="primary" :disabled="!records.length||busy||task?.status==='running'" title="导出本任务全部订单，表格筛选不改变导出范围" @click="exportFile">{{busy?'处理中…':'导出文件'}} ↓</button><button v-if="task?.status==='running'" class="text-button" @click="action(()=>desk.finish(taskId))">结束读取</button><details class="export-options"><summary>导出设置 ▾</summary><div class="export-options-panel"><label class="inline-label">文件格式<select v-model="format"><option value="xlsx">Excel (.xlsx)</option><option value="csv">CSV (.csv)</option></select></label><label class="checkbox"><input v-model="images" type="checkbox" :disabled="format==='csv'">嵌入商品图片</label><button class="text-button" @click="choose">{{state?.outputDir?'更改保存目录':'选择保存目录'}} ↗</button><p :title="state?.outputDir">{{state?.outputDir||'首次导出时选择保存目录'}}</p></div></details></div></div>
             </section><div class="button-row platform-actions"><button v-if="!pageOpen" class="secondary danger" :disabled="busy||!state||state.tasks.some(t=>t.status==='running')" :title="`清理 ${platform?.name} 的本机任务和订单记录，不删除已导出文件`" @click="clearPlatform">清理当前平台缓存</button><button class="secondary" @click="pageOpen?hidePage():openPage()" :disabled="busy">{{pageOpen?'返回导出台':platform?.mode==='proxy'?'打开平台页面':'登录 / 查看平台页'}}</button></div></div>
           <div v-if="pageOpen" class="browser-placeholder"><p>请在下方的官方平台页面完成登录。完成后点击右上角“返回导出台”。</p></div>
           <template v-else>
@@ -65,6 +72,8 @@ onUnmounted(()=>{off?.();offUpdate?.()})
               <div class="button-row"><button class="secondary" :disabled="busy" @click="action(()=>desk.proxyStart(selected),'本机监听已开启，地址 127.0.0.1:17869。请完成下方证书与代理设置。')">开启辅助采集</button><button class="text-button" :disabled="!state?.proxy.running" @click="action(()=>desk.certificate())">打开本机证书</button><button class="text-button" @click="action(()=>desk.proxySettings())">打开代理设置</button></div>
               <details><summary>首次设置步骤与停止方式</summary><ol><li>开启辅助采集后，打开证书，在 Windows 中手动将其导入当前用户的受信任根证书。仅用于本机采集。</li><li>记下原来的代理设置，将手动代理临时设为 <code>127.0.0.1:17869</code>。当前程序尚不自动改动系统设置。</li><li>点击下方“开始采集”，再打开对应微信小程序的订单列表并向下翻页。</li><li>结束后先恢复原来的系统代理设置，再停止辅助采集或退出软件。</li></ol><button class="text-button" @click="action(()=>desk.proxyStop(),'本机监听已停止，请确认系统代理已恢复。')">停止辅助采集</button></details>
             </section>
+            <div v-if="detailHighlight" class="detail-prompt" role="status">列表已采集完成，请提取详情 <span>· {{detailPending}} 笔待提取</span></div>
+            <div v-if="task?.plan" class="plan-inline"><button class="text-button" @click="planOpen=true">计划进度 {{task.plan.segments.filter(s=>s.status==='completed').length}} / {{task.plan.segments.length}}</button><span>{{task.message}}</span><button v-if="task.listOutcome!=='complete'&&task.status!=='running'" class="text-button" :disabled="busy" @click="action(()=>desk.resume(taskId))">继续计划</button></div>
             <section class="results-card compact-results">
               <div v-if="!records.length" class="results-header"><h2>采集结果 <span class="count">{{records.length}}</span></h2><select v-if="tasks.length" :value="taskId" aria-label="查看历史采集任务" :disabled="busy||task?.status==='running'" @change="chooseTask"><option v-for="t in tasks" :key="t.id" :value="t.id">{{t.from}} 至 {{t.to}} · {{t.count}} 笔 · {{labels[t.status]}}</option></select></div>
               <div v-if="task && ['failed','needs_login'].includes(task.status)" class="task-strip" :class="task.status"><span class="dot"></span><strong>{{labels[task.status]}}</strong><span>{{task.message}}</span></div>
@@ -102,6 +111,7 @@ onUnmounted(()=>{off?.();offUpdate?.()})
           <section class="settings-card"><h2>常见提示</h2><ul class="guide-tips"><li>历史订单要选对日期范围；日期内没有订单会明确提示，改日期重新采集即可。</li><li>导出文件按平台分目录并带时间戳，不会覆盖旧文件。</li><li>采集结果随时可在「导出任务」里重新打开、继续或重新导出。</li><li>软件会在后台检查更新，发现新版在顶部提示；数据保存位置见「保存与设置」。</li></ul></section>
         </template>
       </div>
+      <ExtractionPlan v-model="planOpen" :from="from" :to="to" :task="task" :busy="busy||!!state?.tasks.some(t=>t.status==='running')" :platform-name="platform?.name||''" @start="startPlan" @pause="action(()=>desk.pause(taskId))" @resume="action(()=>desk.resume(taskId))" />
     </main>
   </div>
 </template>

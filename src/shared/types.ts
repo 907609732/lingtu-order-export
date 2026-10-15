@@ -11,13 +11,20 @@ export interface Order {
   platform: PlatformId; account: string; id: string; createdAt: string; paidAt: string; shippedAt: string; completedAt: string
   status: string; shop: string; sellerId: string; paidFen: number | null; freightFen: number | null; refundFen: number | null; refundStatus: string
   receiver: string; phone: string; address: string; logistics: string; tracking: string; remark: string; detailUrl: string
-  items: Item[]; extra: Record<string, string>; missing: string[]; source: 'response' | 'page'; capturedAt: string; detailState?: 'pending' | 'complete'
+  items: Item[]; extra: Record<string, string>; missing: string[]; source: 'response' | 'page'; capturedAt: string; detailState?: 'pending' | 'complete'; detailReadAt?: string
 }
+export type ListOutcome = 'pending' | 'complete' | 'limit' | 'interrupted'
+export type PlanSegmentStatus = 'pending' | 'running' | 'completed' | 'paused' | 'needs_attention'
+export interface DateSegment { from:string; to:string }
+export interface PlanInput { granularity:'month'|'day'; segments:DateSegment[] }
+export interface PlanSegment extends DateSegment { id:string; status:PlanSegmentStatus; count:number }
+export interface PlanBucket extends DateSegment { id:string; segmentIds:string[]; status:PlanSegmentStatus; cursor:string }
+export interface ExtractionPlan { granularity:'month'|'day'; segments:PlanSegment[]; buckets:PlanBucket[]; currentBucket?:string }
 export interface Task {
   id: string; platform: PlatformId; account: string; from: string; to: string; status: TaskStatus; createdAt: string; updatedAt: string
-  count: number; pages: number; message: string; cursor: string; exportedPath: string; accountKey?: string; operation?:'list'|'details'
+  count: number; pages: number; message: string; cursor: string; exportedPath: string; accountKey?: string; accountCookie?:string; operation?:'list'|'details'; listOutcome?:ListOutcome; plan?:ExtractionPlan
 }
-export interface StartInput { platform: PlatformId; from: string; to: string }
+export interface StartInput { platform: PlatformId; from: string; to: string; plan?:PlanInput }
 export interface ExportInput { taskId: string; format: 'xlsx' | 'csv'; images: boolean }
 export interface LoggingState { enabled: boolean; directory: string; error: string }
 export interface ExecutionEntry { id: number; time: string; level: 'info'|'success'|'warning'|'error'; message: string; platform?: PlatformId; taskId?: string }

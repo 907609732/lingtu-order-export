@@ -187,3 +187,8 @@ h2{font-size:13px;font-weight:600}
 .export-title .header-controls .form-row{gap:6px}
 .compact-results{border-radius:12px}
 @media(max-width:1699px){.export-title{grid-template-columns:minmax(0,1fr) auto;row-gap:12px}.export-title .platform-actions{grid-column:2;grid-row:1}.export-title .header-controls{grid-column:1/-1;grid-row:2}.export-title .platform-heading h1{font-size:20px}}
+
+.detail-highlight{background:#0071e3!important;border-color:#0071e3!important;color:white!important;box-shadow:0 0 0 3px #0071e31a}
+.detail-prompt{font-size:11px;color:#1769b5;background:#edf5ff;border-radius:7px;padding:8px 12px;margin:0 0 8px}.detail-prompt span{color:#637b93}
+.plan-inline{display:flex;align-items:center;gap:12px;font-size:11px;color:var(--secondary);margin:0 0 8px;min-width:0}.plan-inline>span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.plan-inline button{white-space:nowrap}
+@media(max-width:1200px){.export-title .header-controls .form-row{flex-wrap:wrap}.export-title .header-controls .collection-actions{flex-wrap:wrap;justify-content:flex-end}}

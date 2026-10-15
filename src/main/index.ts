@@ -34,7 +34,7 @@ function bind(name:string,fn:(...args:any[])=>any){ipcMain.handle('desk:'+name,a
   catch(error){if(!['reportError','executionLogs'].includes(name)){const input=args[0];let platform=typeof input==='object'?input?.platform:input;try{if(typeof input==='string'&&!platforms.some(p=>p.id===input))platform=store.get(input).platform;else if(input?.taskId)platform=store.get(input.taskId).platform}catch{}diagnostics.event('ipc.failed',{operation:name,platform,durationMs:Date.now()-started},error)}throw error}
 })}
 function target(id:unknown):PlatformId{return platformById(String(id)).id}
-function idle(){if(store.tasks().some(t=>t.status==='running'))throw new Error('请先暂停当前采集任务')}
+function idle(){if(collector.runs.size||exporting)throw new Error('请等待当前操作结束');if(store.tasks().some(t=>t.status==='running'))throw new Error('请先暂停当前采集任务')}
 async function imageBytes(url:string):Promise<Buffer>{
   const u=new URL(url.startsWith('//')?'https:'+url:url);if(!['https:','http:'].includes(u.protocol)||!['alicdn.com','taobaocdn.com','360buyimg.com','jd.com','pddpic.com','yangkeduo.com','dewu.com','poizon.com','ecukwai.com','kwai.net','ksapisrv.com','meituan.net','dianping.com','ele.me','elemecdn.com'].some(d=>u.hostname===d||u.hostname.endsWith('.'+d)))throw new Error('图片地址不属于平台图片域名')
   const folder=join(app.getPath('userData'),'images');await mkdir(folder,{recursive:true});const file=join(folder,createHash('sha256').update(u.href).digest('hex')+'.png');try{return await readFile(file)}catch{}
@@ -77,7 +77,7 @@ app.whenReady().then(async()=>{
   const taskAction=(id:string,action:string)=>diagnostics.event('task.action',{taskId:id,platform:store.get(id).platform,action})
   bind('pause',(id:string)=>{collector.stop(id);store.update(id,{status:'paused',message:'已暂停，当前结果已保存在本机'});taskAction(id,'pause');change()})
   bind('resume',(id:string)=>{idle();store.update(id,{status:'running',message:'正在继续采集'});taskAction(id,'resume');run(id);change()})
-  bind('retry',(id:string)=>{idle();store.update(id,{status:'running',operation:'list',message:'正在重新检查订单和详情',cursor:''});taskAction(id,'retry');run(id);change()})
+  bind('retry',(id:string)=>{idle();store.update(id,{status:'running',operation:'list',listOutcome:'pending',message:'正在重新检查未完成的订单范围',...(store.get(id).plan?{}:{cursor:''})});taskAction(id,'retry');run(id);change()})
   bind('finish',(id:string)=>{collector.stop(id);store.update(id,{status:'partial',message:'已结束本次读取；仅代表已获取的记录，平台完整范围未自动验证'});taskAction(id,'finish');change()})
   bind('chooseDirectory',async()=>{collector.hide();const result=await dialog.showOpenDialog(win,{title:'选择订单导出目录',properties:['openDirectory','createDirectory'],defaultPath:store.setting('outputDir')||app.getPath('documents')});if(result.canceled)return store.setting('outputDir');store.setting('outputDir',result.filePaths[0]);change();return result.filePaths[0]})
   bind('export',async(input:ExportInput)=>{
