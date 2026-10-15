@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>灵兔 AI · 电商平台买家订单导出工具</title>
+<meta name="description" content="灵兔（LTTLT）电商平台买家订单导出工具——把你在淘宝、1688、拼多多、京东、闲鱼等平台的买家订单一键导出成 Excel/CSV。本机运行，不上传订单数据。">
+<style>
+  :root{
+    --blue:#005EE5;
+    --blue-deep:#0046B8;
+    --blue-light:#3E8BFF;
+    --ink:#0B1220;
+    --muted:#5A6478;
+    --bg:#F6F8FC;
+    --card:#FFFFFF;
+    --border:#E4E9F2;
+    --radius:16px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    color:var(--ink);
+    background:var(--bg);
+    line-height:1.65;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit;text-decoration:none;}
+  .wrap{max-width:1120px;margin:0 auto;padding:0 24px;}
+
+  /* nav */
+  nav{
+    position:sticky;top:0;z-index:50;
+    background:rgba(255,255,255,.86);
+    backdrop-filter:blur(12px);
+    border-bottom:1px solid var(--border);
+  }
+  .nav-inner{display:flex;align-items:center;justify-content:space-between;height:64px;}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:18px;}
+  .brand img{height:34px;width:34px;border-radius:8px;}
+  .brand small{font-weight:400;color:var(--muted);font-size:12px;letter-spacing:.5px;}
+  .nav-links{display:flex;gap:28px;align-items:center;font-size:14px;color:var(--muted);}
+  .nav-links a:hover{color:var(--blue);}
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    background:linear-gradient(135deg,var(--blue),var(--blue-deep));
+    color:#fff;font-weight:600;font-size:15px;
+    padding:11px 22px;border-radius:10px;border:none;cursor:pointer;
+    transition:transform .12s ease, box-shadow .12s ease;
+  }
+  .btn:hover{transform:translateY(-1px);box-shadow:0 8px 20px rgba(0,94,229,.28);}
+  .btn.ghost{background:#fff;color:var(--blue);border:1px solid var(--blue);box-shadow:none;}
+  .btn.ghost:hover{background:#F0F6FF;}
+
+  /* hero */
+  .hero{padding:84px 0 64px;text-align:center;position:relative;overflow:hidden;}
+  .hero::before{
+    content:"";position:absolute;inset:-40% -20%;z-index:0;
+    background:
+      radial-gradient(600px 400px at 20% 20%, rgba(0,94,229,.10), transparent 60%),
+      radial-gradient(600px 400px at 80% 30%, rgba(62,139,255,.12), transparent 60%);
+  }
+  .hero .wrap{position:relative;z-index:1;}
+  .hero-logo{width:88px;height:88px;border-radius:20px;margin-bottom:28px;box-shadow:0 16px 40px rgba(0,94,229,.25);}
+  h1{font-size:44px;line-height:1.2;font-weight:800;letter-spacing:-.5px;margin-bottom:18px;}
+  h1 .grad{
+    background:linear-gradient(120deg,var(--blue),var(--blue-light));
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .sub{font-size:18px;color:var(--muted);max-width:640px;margin:0 auto 34px;}
+  .cta-row{display:flex;gap:16px;justify-content:center;margin-bottom:16px;flex-wrap:wrap;}
+  .version{font-size:13px;color:var(--muted);}
+  .version b{color:var(--ink);}
+
+  /* platform strip */
+  .platforms{margin:40px auto 0;max-width:860px;}
+  .platforms .label{font-size:12px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:14px;}
+  .chips{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;}
+  .chip{
+    background:var(--card);border:1px solid var(--border);
+    padding:7px 16px;border-radius:999px;font-size:13px;color:var(--ink);
+    box-shadow:0 1px 3px rgba(11,18,32,.04);
+  }
+
+  /* sections */
+  section{padding:64px 0;}
+  .sec-head{text-align:center;max-width:640px;margin:0 auto 44px;}
+  .sec-head h2{font-size:32px;font-weight:800;margin-bottom:12px;letter-spacing:-.3px;}
+  .sec-head p{color:var(--muted);font-size:16px;}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px;}
+  .card{
+    background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+    padding:28px;transition:transform .15s ease, box-shadow .15s ease;
+  }
+  .card:hover{transform:translateY(-3px);box-shadow:0 12px 30px rgba(11,18,32,.08);}
+  .card .icon{
+    width:46px;height:46px;border-radius:12px;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(135deg,rgba(0,94,229,.12),rgba(62,139,255,.12));
+    font-size:22px;margin-bottom:16px;
+  }
+  .card h3{font-size:17px;margin-bottom:8px;}
+  .card p{font-size:14px;color:var(--muted);}
+
+  /* security */
+  .sec-dark{background:linear-gradient(160deg,var(--ink),#14203A);color:#fff;}
+  .sec-dark .sec-head p{color:#A7B4CC;}
+  .sec-dark h2{color:#fff;}
+  .sec-dark .card{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);}
+  .sec-dark .card h3{color:#fff;}
+  .sec-dark .card p{color:#A7B4CC;}
+  .sec-dark .card .icon{background:rgba(62,139,255,.2);}
+
+  /* steps */
+  .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px;counter-reset:step;}
+  .step{position:relative;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:28px 24px;}
+  .step .num{
+    width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--blue),var(--blue-deep));
+    color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;margin-bottom:14px;font-size:16px;
+  }
+  .step h3{font-size:16px;margin-bottom:6px;}
+  .step p{font-size:14px;color:var(--muted);}
+
+  /* download */
+  .dl-box{
+    background:var(--card);border:1px solid var(--border);border-radius:20px;
+    padding:44px;text-align:center;max-width:640px;margin:0 auto;
+    box-shadow:0 20px 50px rgba(11,18,32,.08);
+  }
+  .dl-box h3{font-size:22px;margin-bottom:8px;}
+  .dl-box .meta{color:var(--muted);font-size:14px;margin-bottom:24px;}
+  .dl-box .btn{font-size:16px;padding:14px 32px;}
+
+  /* faq */
+  .faq{max-width:760px;margin:0 auto;}
+  details{
+    background:var(--card);border:1px solid var(--border);border-radius:12px;
+    margin-bottom:12px;padding:0 22px;
+  }
+  details summary{
+    cursor:pointer;font-weight:600;font-size:15px;padding:18px 0;list-style:none;
+    display:flex;justify-content:space-between;align-items:center;
+  }
+  details summary::after{content:"+";font-size:20px;color:var(--blue);transition:transform .15s ease;}
+  details[open] summary::after{transform:rotate(45deg);}
+  details p{padding:0 0 18px;font-size:14px;color:var(--muted);}
+
+  footer{border-top:1px solid var(--border);padding:40px 0;text-align:center;font-size:13px;color:var(--muted);}
+  footer .f-brand{display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:8px;color:var(--ink);font-weight:600;font-size:15px;}
+  footer img{height:22px;width:22px;border-radius:5px;}
+
+  @media(max-width:640px){
+    h1{font-size:32px;}
+    .nav-links{display:none;}
+    .hero{padding:56px 0 48px;}
+    section{padding:44px 0;}
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap nav-inner">
+    <a class="brand" href="#top">
+      <img src="assets/logo.png" alt="灵兔">
+      <span>灵兔 <small>LTTLT</small></span>
+    </a>
+    <div class="nav-links">
+      <a href="#features">功能</a>
+      <a href="#security">数据安全</a>
+      <a href="#usage">使用步骤</a>
+      <a href="#faq">常见问题</a>
+      <a class="btn" style="padding:9px 18px;font-size:14px;" href="#download">免费下载</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap">
+    <img class="hero-logo" src="assets/logo.png" alt="灵兔 Logo">
+    <h1>电商平台 <span class="grad">买家订单导出工具</span></h1>
+    <p class="sub">把你在淘宝、1688、拼多多、京东、闲鱼等平台的买家订单，一键采集导出成 Excel / CSV。本机运行，不碰账号密码，不上传订单数据。</p>
+    <div class="cta-row">
+      <a class="btn" href="#download">免费下载 Windows 版</a>
+      <a class="btn ghost" href="#usage">查看使用步骤</a>
+    </div>
+    <div class="version">当前版本 <b>v0.1.9</b> · 开发验证版，功能持续更新</div>
+
+    <div class="platforms">
+      <div class="label">支持平台</div>
+      <div class="chips">
+        <span class="chip">淘宝 / 天猫</span>
+        <span class="chip">1688</span>
+        <span class="chip">拼多多</span>
+        <span class="chip">京东</span>
+        <span class="chip">闲鱼</span>
+        <span class="chip">得物</span>
+        <span class="chip">快手</span>
+        <span class="chip">饿了么</span>
+        <span class="chip">美团</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section id="features">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>核心功能</h2>
+      <p>为采购与订单管理场景设计，让买家订单导出不再繁琐。</p>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <div class="icon">📥</div>
+        <h3>一键采集</h3>
+        <p>选平台、登录官方页、按订单下单时间选定起止日期，即可开始采集，历史订单调整日期即可。</p>
+      </div>
+      <div class="card">
+        <div class="icon">🧩</div>
+        <h3>九大平台覆盖</h3>
+        <p>淘宝/天猫、1688、拼多多、京东、闲鱼、得物、快手、饿了么、美团，每个平台独立登录。</p>
+      </div>
+      <div class="card">
+        <div class="icon">📊</div>
+        <h3>导出 Excel / CSV</h3>
+        <p>Excel 默认嵌入商品图；图片失败自动保留链接并记入缺项清单，导出文件按平台分目录。</p>
+      </div>
+      <div class="card">
+        <div class="icon">📝</div>
+        <h3>透明执行日志</h3>
+        <p>实时显示每一步进度——第几页、累计订单数、详情补全、写文件，不显示账号与订单正文。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="security" class="sec-dark">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>数据安全</h2>
+      <p>你的订单数据，只属于你。</p>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <div class="icon">🔒</div>
+        <h3>订单不上传</h3>
+        <p>订单与登录状态一律不上传服务器，网络访问仅用于官方平台页面、接口和商品图片。</p>
+      </div>
+      <div class="card">
+        <div class="icon">💻</div>
+        <h3>本机运行</h3>
+        <p>数据保存在本机 AppData，导出文件按平台分目录并附时间戳，完全本地化。</p>
+      </div>
+      <div class="card">
+        <div class="icon">🛡️</div>
+        <h3>官方页面内登录</h3>
+        <p>不接触你的账号密码，在平台官方页面自行登录，登录态由各平台独立管理。</p>
+      </div>
+      <div class="card">
+        <div class="icon">🚫</div>
+        <h3>日志脱敏</h3>
+        <p>排查日志不写入账号、订单号、订单正文、Cookie、Token、收货信息或接口响应。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="usage">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>三步搞定</h2>
+      <p>从安装到导出，几分钟完成。</p>
+    </div>
+    <div class="steps">
+      <div class="step">
+        <div class="num">1</div>
+        <h3>安装并打开</h3>
+        <p>运行安装包，打开桌面的「灵兔 AI 电商平台买家订单导出工具」。</p>
+      </div>
+      <div class="step">
+        <div class="num">2</div>
+        <h3>选平台并登录</h3>
+        <p>选择平台，点击「登录 / 查看平台页」，在官方页面自行登录。</p>
+      </div>
+      <div class="step">
+        <div class="num">3</div>
+        <h3>采集并导出</h3>
+        <p>选择起止日期开始采集，选保存目录，导出 Excel 或 CSV。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="download">
+  <div class="wrap">
+    <div class="dl-box">
+      <img class="hero-logo" src="assets/logo.png" alt="灵兔" style="width:64px;height:64px;margin-bottom:18px;">
+      <h3>下载灵兔 AI 订单导出工具</h3>
+      <p class="meta">Windows x64 · 安装包 LingtuOrderExport-0.1.9-Setup.exe · 免费</p>
+      <a class="btn" href="#">立即下载</a>
+      <p class="meta" style="margin-top:16px;">软件内自动检查更新，也可在「保存与设置」手动检查。</p>
+    </div>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>常见问题</h2>
+    </div>
+    <div class="faq">
+      <details>
+        <summary>支持哪些平台？</summary>
+        <p>淘宝/天猫、1688、拼多多、京东、闲鱼支持官方登录页采集；得物、快手、饿了么、美团的微信小程序采集使用本机辅助代理。</p>
+      </details>
+      <details>
+        <summary>我的订单数据安全吗？</summary>
+        <p>订单与登录状态不上传任何服务器，数据保存在本机。网络访问仅用于官方平台页面、接口和商品图片。</p>
+      </details>
+      <details>
+        <summary>导出格式是什么？</summary>
+        <p>支持 Excel（.xlsx）和 CSV。Excel 默认嵌入商品图片，图片加载失败会保留链接并记录在缺项清单中。</p>
+      </details>
+      <details>
+        <summary>能导出历史订单吗？</summary>
+        <p>可以。采集时按订单的下单时间选择起止日期，历史订单调整日期或点击「今年」即可。</p>
+      </details>
+      <details>
+        <summary>如何更新软件？</summary>
+        <p>启动时后台自动检查新版本，发现新版本会在界面顶部提示，可一键前往下载，不影响正常使用。</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="f-brand">
+      <span>五成</span>
+    </div>
+    <p>灵兔 AI 电商平台买家订单导出工具 · v0.1.9 · 开发验证版</p>
+    <p>五成电子商务集团 · buyer.lttlt.top</p>
+  </div>
+</footer>
+
+</body>
+</html>
