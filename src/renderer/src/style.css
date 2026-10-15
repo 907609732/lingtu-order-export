@@ -175,3 +175,15 @@ h2{font-size:13px;font-weight:600}
 .compact-results>.results-header{padding:10px 12px;justify-content:flex-start}
 .compact-results>.results-header select{font-size:11px;max-width:300px}
 @media(max-width:1200px){.compact-controls .form-row>label{font-size:10px;gap:3px}.compact-controls .form-row input{width:114px;padding-inline:4px}.collection-actions{gap:4px}.collection-actions .primary,.collection-actions .secondary{padding-inline:7px}.compact-controls .quick-date button{padding-inline:5px}}
+
+/* Place collection controls in the title's unused horizontal space. */
+.export-title{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:18px;margin-bottom:12px;align-items:center}
+.export-title .platform-heading{min-width:0}
+.export-title .platform-heading h1{font-size:20px;white-space:nowrap}
+.export-title .platform-heading p{display:none}
+.export-title .header-controls{padding:0;border:0;box-shadow:none;background:none;min-width:0}
+.export-title .platform-actions{white-space:nowrap;gap:6px}
+.export-title .platform-actions button{font-size:11px;padding:7px 10px;min-height:32px}
+.export-title .header-controls .form-row{gap:6px}
+.compact-results{border-radius:12px}
+@media(max-width:1699px){.export-title{grid-template-columns:minmax(0,1fr) auto;row-gap:12px}.export-title .platform-actions{grid-column:2;grid-row:1}.export-title .header-controls{grid-column:1/-1;grid-row:2}.export-title .platform-heading h1{font-size:20px}}
