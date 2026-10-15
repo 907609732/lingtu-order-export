@@ -13,7 +13,7 @@ import { Diagnostics } from './diagnostics'
 import { ExecutionLog } from './execution-log'
 import { ExecutionProgress } from './execution-progress'
 import type { ExportInput,PlatformId,StartInput,UpdateInfo } from '../shared/types'
-import { WEBSITE_URL } from '../shared/config'
+import { WEBSITE_URL,REPOSITORY_URL } from '../shared/config'
 import { checkLatest,compareVersions } from './updater'
 import { reportLaunch } from './analytics'
 import {chooseUserData} from './user-data'
@@ -98,6 +98,7 @@ app.whenReady().then(async()=>{
   bind('checkUpdate',async()=>{const latest=await checkLatest();if(latest&&compareVersions(latest.latest,app.getVersion())>0){latestUpdate={...latest,current:app.getVersion()};if(win&&!win.isDestroyed())win.webContents.send('desk:updateAvailable',latestUpdate)}return latestUpdate})
   bind('openUpdate',()=>{if(latestUpdate?.url)shell.openExternal(latestUpdate.url)})
   bind('openWebsite',()=>{if(WEBSITE_URL)shell.openExternal(WEBSITE_URL)})
+  bind('openRepository',()=>shell.openExternal(REPOSITORY_URL))
   // 后台记录启动、上报日活、检查更新；均不影响正常使用，失败静默。
   if(!process.env.ORDERDESK_TEST_DATA)void (async()=>{const installId=store.installId();store.logLaunch(app.getVersion());await reportLaunch(installId,app.getVersion());const latest=await checkLatest();if(latest&&compareVersions(latest.latest,app.getVersion())>0){latestUpdate={...latest,current:app.getVersion()};if(win&&!win.isDestroyed())win.webContents.send('desk:updateAvailable',latestUpdate)}})()
   win.once('ready-to-show',()=>win.show())

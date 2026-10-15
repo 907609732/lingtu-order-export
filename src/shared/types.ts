@@ -43,6 +43,6 @@ export interface DeskAPI {
   reportError(origin: 'window' | 'promise' | 'vue', error: { name: string; message: string; stack: string }): Promise<void>
   executionLogs(platform: PlatformId): Promise<ExecutionEntry[]>; setExecutionLogVisible(visible: boolean): Promise<void>
   onExecutionLog(callback: () => void): () => void
-  checkUpdate(): Promise<UpdateInfo | null>; openUpdate(): Promise<void>; openWebsite(): Promise<void>
+  checkUpdate(): Promise<UpdateInfo | null>; openUpdate(): Promise<void>; openWebsite(): Promise<void>; openRepository(): Promise<void>
   onUpdate(callback: () => void): () => void
 }

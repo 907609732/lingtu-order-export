@@ -45,6 +45,7 @@ async function openTask(t:Task){selected.value=t.platform;taskId.value=t.id;from
 async function checkUpdate(){await action(async()=>{const info=await desk.checkUpdate();notice.value=info?`发现新版本 v${info.latest}，可前往下载。`:'当前已是最新版本。'})}
 function openUpdate(){void desk.openUpdate()}
 function openWebsite(){void desk.openWebsite()}
+function openRepository(){void desk.openRepository()}
 onMounted(async()=>{await action(async()=>{await refresh();const latest=tasks.value[0];if(latest)await openTask(latest)});off=desk.onChange(()=>{if(refreshPending)return;refreshPending=true;setTimeout(()=>{refreshPending=false;void refresh()},250)});offUpdate=desk.onUpdate(()=>{void refresh()})})
 onUnmounted(()=>{off?.();offUpdate?.()})
 </script>
@@ -101,7 +102,7 @@ onUnmounted(()=>{off?.();offUpdate?.()})
           </section>
           <section class="settings-card"><h2>导出文件夹</h2><p class="path">{{state?.outputDir||'还未选择，首次导出前设置即可'}}</p><div class="button-row"><button class="primary" @click="choose">选择文件夹</button><button class="secondary" :disabled="!state?.outputDir" @click="action(()=>desk.openOutput())">打开文件夹</button></div></section>
           <section class="settings-card"><h2>当前验证状态</h2><p>开发验证版。程序安装、样例解析和文件生成，与真实平台采集验收分别记录。请先使用短日期范围核对订单。</p></section>
-          <section class="settings-card about-card"><h2>关于</h2><p class="about-brand">灵兔 AI 电商平台买家订单导出工具 <span class="by">BY 五成</span></p><div class="button-row"><button class="secondary" :disabled="busy" @click="openWebsite">访问官网 ↗</button><button class="secondary" :disabled="busy" @click="checkUpdate">检查更新</button></div><p v-if="state?.update" class="update-tip">发现新版本 v{{state.update.latest}}，<a href="#" @click.prevent="openUpdate">前往下载</a></p></section>
+          <section class="settings-card about-card"><h2>关于</h2><p class="about-brand">灵兔 AI 电商平台买家订单导出工具 <span class="by">BY 五成</span></p><div class="button-row"><button class="secondary" :disabled="busy" @click="openWebsite">访问官网 ↗</button><button class="secondary" :disabled="busy" @click="openRepository">GitHub 仓库 ↗</button><button class="secondary" :disabled="busy" @click="checkUpdate">检查更新</button></div><p v-if="state?.update" class="update-tip">发现新版本 v{{state.update.latest}}，<a href="#" @click.prevent="openUpdate">前往下载</a></p></section>
         </template>
         <template v-else>
           <div class="page-title"><div><div class="eyebrow">GUIDE</div><h1>使用教程</h1><p>了解这个软件能做什么，以及如何导出你的订单。</p></div></div>
