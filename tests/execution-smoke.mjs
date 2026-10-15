@@ -36,7 +36,7 @@ try{
   await app.evaluate(async({webContents})=>{const platform=webContents.getAllWebContents().find(w=>w.getURL().startsWith('https://'));await platform.executeJavaScript('window.releasePage()')})
   await expect(live).toContainText('第 2 页读取完成',{timeout:15000})
   await expect(live).toContainText('本次列表读取结束，已保留 2 笔')
-  await expect(page.locator('.task-strip')).toHaveClass(/partial/)
+  await expect(page.getByLabel('查看历史采集任务').locator('option:checked')).toContainText('已有结果 · 待核对')
   const text=await live.innerText();for(const secret of ['PRIVATE_SHOP','PRIVATE_PRODUCT','900000000000001','900000000000002'])assert.ok(!text.includes(secret))
   // Filter switch must not show another platform's collection activity.
   await page.locator('nav button').filter({hasText:'京东'}).click();await expect(live).not.toContainText('第 2 页读取完成')
@@ -44,7 +44,7 @@ try{
   const db=new DatabaseSync(join(root,'orders.sqlite'));db.prepare('INSERT OR REPLACE INTO settings VALUES(?,?)').run('outputDir',join(root,'exports'));db.close()
   await page.reload();await expect(live).toContainText('第 2 页读取完成')
   await page.locator('nav button').filter({hasText:'淘宝 / 天猫'}).click()
-  await page.getByLabel('嵌入商品图片').uncheck()
+  await page.locator('.export-options summary').click();await page.getByLabel('嵌入商品图片').uncheck();await page.locator('.export-options summary').click()
   await page.getByRole('button',{name:'导出文件',exact:false}).click()
   await expect(live).toContainText('正在写入导出文件')
   await expect(live).toContainText('导出完成，已保存 2 笔订单')
@@ -69,8 +69,8 @@ try{
   await app.close();app=undefined
   page=await launch();await expect(page.getByRole('log')).toHaveCount(0)
   await page.getByRole('button',{name:'保存与设置'}).click();await page.getByRole('switch',{name:'显示执行日志'}).click()
-  await page.locator('nav button').filter({hasText:'淘宝 / 天猫'}).click();await expect(page.getByRole('log')).toContainText('程序已启动')
+  await page.locator('nav button').filter({hasText:'淘宝 / 天猫'}).click();await page.getByRole('button',{name:'展开日志 ▾'}).click();await expect(page.getByRole('log')).toContainText('程序已启动')
   await app.close();app=undefined
-  page=await launch();await expect(page.getByRole('log')).toBeVisible()
+  page=await launch();await expect(page.getByRole('region',{name:'执行日志面板'})).toBeVisible();await page.getByRole('button',{name:'展开日志 ▾'}).click();await expect(page.getByRole('log')).toBeVisible()
   console.log(JSON.stringify({passed:true,checks:['live feed before request completion','10 second wait heartbeat','2 page collection','Chinese partial and error states','platform isolation','export progress','copy logs','follow latest','file logging remains off','visible setting persists both ways'],screenshots:[join(root,'live-wait.png'),join(root,'live-complete.png')]}))
 }finally{if(app)await app.close()}

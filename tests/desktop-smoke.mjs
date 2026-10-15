@@ -34,7 +34,7 @@ try {
   await page.reload()
   await page.locator('nav button').filter({hasText:'拼多多'}).click()
   await page.getByText('合成测试商品', {exact:true}).waitFor()
-  await page.getByLabel('嵌入商品图片').uncheck()
+  await page.locator('.export-options summary').click();await page.getByLabel('嵌入商品图片').uncheck();await page.locator('.export-options summary').click()
   await page.getByRole('button', {name:'导出文件'}).click()
   await page.getByText('已导出 1 笔订单', {exact:false}).waitFor({timeout:30000})
   const state = await page.evaluate(() => window.desk.state())

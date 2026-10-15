@@ -157,3 +157,21 @@ h2{font-size:13px;font-weight:600}
 .guide-steps li b{color:#363640;font-weight:600}
 @media(max-width:1200px){.content{padding-inline:18px}.results-heading select{max-width:235px}.results-header{gap:8px;padding-inline:12px}.button-row{gap:6px}.results-header .primary,.results-header .secondary{padding-inline:10px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;scroll-behavior:auto!important}}
+
+.compact-controls{padding:10px 12px;margin-bottom:0;border-radius:12px 12px 0 0;border-bottom:0}
+.compact-controls .form-row{gap:6px;flex-wrap:nowrap}
+.compact-controls .form-row>label{gap:5px}
+.compact-controls .form-row input{width:125px;font-size:11px}
+.compact-controls .quick-date button{padding-inline:7px}
+.collection-actions{display:flex;align-items:center;gap:6px;margin-left:auto;white-space:nowrap}
+.collection-actions .primary,.collection-actions .secondary{font-size:11px;padding:7px 10px;min-width:0;min-height:32px}
+.collection-actions .start{margin-left:0}
+.export-options{position:relative;font-size:11px;color:var(--secondary)}
+.export-options summary{cursor:pointer;list-style:none;padding:7px 9px;border:1px solid var(--line);border-radius:7px;background:white;white-space:nowrap}
+.export-options-panel{position:absolute;right:0;top:calc(100% + 8px);width:280px;z-index:30;padding:16px;display:grid;gap:14px;background:white;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 38px #18284924;white-space:normal}
+.export-options-panel p{font-size:10px;color:var(--muted);overflow-wrap:anywhere;line-height:1.7}
+.export-options-panel .text-button{text-align:left}
+.compact-results{border-radius:0 0 12px 12px}
+.compact-results>.results-header{padding:10px 12px;justify-content:flex-start}
+.compact-results>.results-header select{font-size:11px;max-width:300px}
+@media(max-width:1200px){.compact-controls .form-row>label{font-size:10px;gap:3px}.compact-controls .form-row input{width:114px;padding-inline:4px}.collection-actions{gap:4px}.collection-actions .primary,.collection-actions .secondary{padding-inline:7px}.compact-controls .quick-date button{padding-inline:5px}}

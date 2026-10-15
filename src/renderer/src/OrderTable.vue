@@ -35,7 +35,7 @@ watch(()=>props.platform,loadPreferences,{immediate:true})
 </script>
 <template>
   <section class="order-browser" :class="{'table-focused':focused}" aria-label="订单数据表">
-    <div class="order-toolbar">
+    <div class="order-toolbar"><slot v-if="!focused" name="toolbar" />
       <div class="order-search"><span>⌕</span><input v-model="query" aria-label="搜索订单数据" placeholder="搜索订单、商品、规格、收货人、电话或物流单号"><button v-if="query" aria-label="清除搜索" @click="query=''">×</button></div>
       <select v-model="status" aria-label="订单状态筛选"><option value="">全部状态</option><option v-for="s in statuses" :key="s">{{s}}</option></select>
       <select v-model="shop" aria-label="商家筛选"><option value="">全部商家</option><option v-for="s in shops" :key="s">{{s}}</option></select>
@@ -43,8 +43,8 @@ watch(()=>props.platform,loadPreferences,{immediate:true})
       <button v-if="hasFilter" class="text-button" @click="reset">清空筛选</button>
       <div class="browser-view-tools"><label><input v-model="showImages" type="checkbox" @change="savePreferences">商品图片</label><div class="column-picker"><button class="secondary" :aria-expanded="columnMenu" @click="columnMenu=!columnMenu">显示列 <span>{{visibleColumns.length+1}}</span> ▾</button><div v-if="columnMenu" class="column-menu"><div class="column-menu-head"><strong>列表显示字段</strong><button @click="columnMenu=false" aria-label="关闭列设置">×</button></div><label><input type="checkbox" checked disabled>订单号（固定）</label><label v-for="c in orderColumns" :key="c.key"><input type="checkbox" :checked="visibleKeys.includes(c.key)" @change="toggleColumn(c.key)">{{c.label}}</label><button class="text-button" @click="restoreColumns">恢复默认列</button></div></div><button class="secondary" @click="focused=!focused">{{focused?'退出大表':'专注看表'}}</button></div>
     </div>
-    <div class="order-summary"><span>显示 <strong>{{filtered.length}}</strong> / {{orders.length}} 笔<span v-if="hasFilter" class="filter-note"> · 筛选仅影响浏览，导出仍包含本任务全部订单</span></span><span>实付款合计 <b>{{money(total)}}</b><small v-if="unknownAmounts">（另有 {{unknownAmounts}} 笔金额未获取）</small><span v-if="hint" class="copy-hint" role="status">{{hint}}</span></span></div>
-    <ElTable ref="table" :data="shown" row-key="id" stripe :height="focused?'calc(100vh - 204px)':'max(240px, calc(100vh - 570px))'" :default-sort="{prop:'createdAt',order:'descending'}" :show-overflow-tooltip="true" @sort-change="sort" class="orders-grid" empty-text="没有符合筛选条件的订单，可清空筛选后重试。">
+
+    <ElTable ref="table" :data="shown" row-key="id" stripe :height="focused?'calc(100vh - 204px)':'max(240px, calc(100vh - 420px))'" :default-sort="{prop:'createdAt',order:'descending'}" :show-overflow-tooltip="true" @sort-change="sort" class="orders-grid" empty-text="没有符合筛选条件的订单，可清空筛选后重试。">
       <!-- @vue-generic {Order} -->
       <ElTableColumn type="expand" width="38" fixed="left"><template #default="scope"><OrderDetail :order="scope.row" @copy="copy" /></template></ElTableColumn>
       <ElTableColumn type="index" label="#" width="50" fixed="left" :index="(index:number)=>(page-1)*pageSize+index+1" />
@@ -65,6 +65,7 @@ watch(()=>props.platform,loadPreferences,{immediate:true})
         </template>
       </ElTableColumn>
     </ElTable>
+    <div class="order-summary"><span>显示 <strong>{{filtered.length}}</strong> / {{orders.length}} 笔<span v-if="hasFilter" class="filter-note"> · 筛选仅影响浏览，导出仍包含本任务全部订单</span></span><span>实付款合计 <b>{{money(total)}}</b><small v-if="unknownAmounts">（另有 {{unknownAmounts}} 笔金额未获取）</small><span v-if="hint" class="copy-hint" role="status">{{hint}}</span></span></div>
     <div class="order-pagination"><span>共 {{filtered.length}} 笔 <select v-model.number="pageSize" aria-label="每页条数" @change="savePreferences"><option :value="20">20 条/页</option><option :value="50">50 条/页</option><option :value="100">100 条/页</option><option :value="200">200 条/页</option></select></span><div><button class="secondary" :disabled="page===1" @click="go(page-1)">上一页</button><strong>{{page}} / {{pageCount}}</strong><button class="secondary" :disabled="page===pageCount" @click="go(page+1)">下一页</button><label>前往 <input v-model.number="jump" type="number" aria-label="跳转页码" min="1" :max="pageCount" @keydown.enter="go(jump)"> 页</label><button class="text-button" @click="go(jump)">跳转</button></div><span class="table-help">点击订单号展开 · 拖动表头边界调整列宽 · 底部横向滚动查看更多</span></div>
   </section>
 </template>
