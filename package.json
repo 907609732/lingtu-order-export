@@ -1,6 +1,6 @@
 {
   "name": "lingtu-order-export",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "description": "灵兔 AI 电商平台买家订单导出",
   "author": "Local Order Desk",
   "private": true,
