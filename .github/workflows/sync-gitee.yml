@@ -1,0 +1,43 @@
+name: Sync to Gitee
+
+on:
+  push:
+    branches: ['**']
+    tags: ['**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-to-gitee
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Configure dedicated Gitee SSH identity
+        env:
+          SYNC_KEY: ${{ secrets.GITEE_SYNC_SSH_KEY }}
+          KNOWN_HOSTS: ${{ vars.GITEE_SSH_KNOWN_HOSTS }}
+        run: |
+          test -n "$SYNC_KEY" || { echo 'Missing GITEE_SYNC_SSH_KEY'; exit 1; }
+          test -n "$KNOWN_HOSTS" || { echo 'Missing GITEE_SSH_KNOWN_HOSTS'; exit 1; }
+          install -m 700 -d "$HOME/.ssh"
+          printf '%s\n' "$SYNC_KEY" | tr -d '\r' > "$HOME/.ssh/lingtu_gitee_sync"
+          printf '%s\n' "$KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/lingtu_gitee_sync" "$HOME/.ssh/known_hosts"
+      - name: Synchronize branches, commits and tags
+        env:
+          GIT_SSH_COMMAND: ssh -i ~/.ssh/lingtu_gitee_sync -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes
+        run: |
+          git clone --bare "https://github.com/$GITHUB_REPOSITORY.git" source.git
+          git -C source.git push --atomic git@gitee.com:chen-yuecai/lingtu-order-export.git 'refs/heads/*:refs/heads/*' 'refs/tags/*:refs/tags/*'
+          git ls-remote --heads --tags "https://github.com/$GITHUB_REPOSITORY.git" | sort > github-refs.txt
+          git ls-remote --heads --tags git@gitee.com:chen-yuecai/lingtu-order-export.git | sort > gitee-refs.txt
+          diff -u github-refs.txt gitee-refs.txt
+      - name: Remove temporary SSH identity
+        if: always()
+        run: rm -f "$HOME/.ssh/lingtu_gitee_sync"
