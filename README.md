@@ -2,7 +2,7 @@
 
 在 Windows 电脑上采集多平台买家历史订单，导出带商品图片的 Excel 或 CSV，方便采购整理、对账与留档。
 
-[官网下载](https://buyer.lttlt.top/) · [下载安装包](https://github.com/907609732/lingtu-order-export/releases/latest) · [图文教程](https://buyer.lttlt.top/guide.html) · [问题反馈](https://github.com/907609732/lingtu-order-export/issues)
+[官网下载](https://buyer.lttlt.top/) · [下载安装包](https://github.com/907609732/lingtu-order-export/releases/latest) · [图文教程](https://buyer.lttlt.top/guide.html) · [问题反馈](https://github.com/907609732/lingtu-order-export/issues) · [Gitee 仓库](https://gitee.com/chen-yuecai/lingtu-order-export)
 
 ## 主要功能
 
