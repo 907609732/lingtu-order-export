@@ -165,3 +165,4 @@ html{scroll-padding-top:90px}a:focus-visible,button:focus-visible,summary:focus-
 /* Product name remains readable alongside the navigation on narrow screens. */
 .brand span{font-size:16px;line-height:1.35}
 @media(max-width:600px){.brand span{font-size:13px;max-width:156px}}
+@media(max-width:420px){.nav-links>a[href="https://github.com/907609732/lingtu-order-export"]{display:none}.nav-links{gap:10px}}
