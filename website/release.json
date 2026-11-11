@@ -1,12 +1,12 @@
 {
-  "version": "v0.1.19",
-  "releaseUrl": "https://github.com/907609732/lingtu-order-export/releases/tag/v0.1.19",
-  "downloadUrl": "https://github.com/907609732/lingtu-order-export/releases/download/v0.1.19/LingtuOrderExport-0.1.19-Setup.exe",
-  "filename": "LingtuOrderExport-0.1.19-Setup.exe",
-  "size": 125033577,
-  "publishedAt": "2026-10-15T16:07:41Z",
+  "version": "v0.1.21",
+  "releaseUrl": "https://github.com/907609732/lingtu-order-export/releases/tag/v0.1.21",
+  "downloadUrl": "https://github.com/907609732/lingtu-order-export/releases/download/v0.1.21/LingtuOrderExport-0.1.21-Setup.exe",
+  "filename": "LingtuOrderExport-0.1.21-Setup.exe",
+  "size": 125250799,
+  "publishedAt": "2026-11-11T12:59:53Z",
   "previewVersion": "v0.1.14",
-  "sha256": "sha256:4eca7c0dd8ccf27a40acddb712ea091bbea487402e302a9383a63235cc403b8a",
+  "sha256": "sha256:3456d0ca372c692300c47d653fb1c3c588d211fd1e24422cb6ab135d339405ac",
   "netdiskUrl": "",
   "netdiskCode": ""
 }
