@@ -3,204 +3,59 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>灵兔 AI · 电商平台买家订单导出工具</title>
-<meta name="description" content="灵兔（LTTLT）电商平台买家订单导出工具——把你在淘宝、1688、拼多多、京东、闲鱼等平台的买家订单一键导出成 Excel/CSV。本机运行，不上传订单数据。">
+<title>电商平台采购订单导出</title>
+<meta name="description" content="电商平台采购订单导出——把你在淘宝、1688、拼多多、京东、闲鱼等平台的买家订单一键导出成 Excel/CSV。本机运行，不上传订单数据。">
 <link rel="icon" type="image/png" href="assets/logo-icon.png?v=34a7611">
-<style>
-  :root{
-    --blue:#005EE5;
-    --blue-deep:#0046B8;
-    --blue-light:#3E8BFF;
-    --ink:#0B1220;
-    --muted:#5A6478;
-    --bg:#F6F8FC;
-    --card:#FFFFFF;
-    --border:#E4E9F2;
-    --radius:16px;
-  }
-  *{margin:0;padding:0;box-sizing:border-box;}
-  html{scroll-behavior:smooth;}
-  body{
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
-    color:var(--ink);
-    background:var(--bg);
-    line-height:1.65;
-    -webkit-font-smoothing:antialiased;
-  }
-  a{color:inherit;text-decoration:none;}
-  .wrap{max-width:1120px;margin:0 auto;padding:0 24px;}
-
-  /* nav */
-  nav{
-    position:sticky;top:0;z-index:50;
-    background:rgba(255,255,255,.86);
-    backdrop-filter:blur(12px);
-    border-bottom:1px solid var(--border);
-  }
-  .nav-inner{display:flex;align-items:center;justify-content:space-between;height:64px;}
-  .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:18px;}
-  .brand img{height:34px;width:34px;border-radius:8px;}
-  .brand small{font-weight:400;color:var(--muted);font-size:12px;letter-spacing:.5px;}
-  .nav-links{display:flex;gap:28px;align-items:center;font-size:14px;color:var(--muted);}
-  .nav-links a:hover{color:var(--blue);}
-  .btn{
-    display:inline-flex;align-items:center;justify-content:center;gap:8px;
-    background:linear-gradient(135deg,var(--blue),var(--blue-deep));
-    color:#fff;font-weight:600;font-size:15px;
-    padding:11px 22px;border-radius:10px;border:none;cursor:pointer;
-    transition:transform .12s ease, box-shadow .12s ease;
-  }
-  .btn:hover{transform:translateY(-1px);box-shadow:0 8px 20px rgba(0,94,229,.28);}
-  .btn.ghost{background:#fff;color:var(--blue);border:1px solid var(--blue);box-shadow:none;}
-  .btn.ghost:hover{background:#F0F6FF;}
-
-  /* hero */
-  .hero{padding:84px 0 64px;text-align:center;position:relative;overflow:hidden;}
-  .hero::before{
-    content:"";position:absolute;inset:-40% -20%;z-index:0;
-    background:
-      radial-gradient(600px 400px at 20% 20%, rgba(0,94,229,.10), transparent 60%),
-      radial-gradient(600px 400px at 80% 30%, rgba(62,139,255,.12), transparent 60%);
-  }
-  .hero .wrap{position:relative;z-index:1;}
-  .hero-logo{width:88px;height:88px;border-radius:20px;margin-bottom:28px;box-shadow:0 16px 40px rgba(0,94,229,.25);}
-  h1{font-size:44px;line-height:1.2;font-weight:800;letter-spacing:-.5px;margin-bottom:18px;}
-  h1 .grad{
-    background:linear-gradient(120deg,var(--blue),var(--blue-light));
-    -webkit-background-clip:text;background-clip:text;color:transparent;
-  }
-  .sub{font-size:18px;color:var(--muted);max-width:640px;margin:0 auto 34px;}
-  .cta-row{display:flex;gap:16px;justify-content:center;margin-bottom:16px;flex-wrap:wrap;}
-  .version{font-size:13px;color:var(--muted);}
-  .version b{color:var(--ink);}
-
-  /* platform strip */
-  .platforms{margin:40px auto 0;max-width:860px;}
-  .platforms .label{font-size:12px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:14px;}
-  .chips{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;}
-  .chip{
-    background:var(--card);border:1px solid var(--border);
-    padding:7px 16px;border-radius:999px;font-size:13px;color:var(--ink);
-    box-shadow:0 1px 3px rgba(11,18,32,.04);
-  }
-
-  /* sections */
-  section{padding:64px 0;}
-  .sec-head{text-align:center;max-width:640px;margin:0 auto 44px;}
-  .sec-head h2{font-size:32px;font-weight:800;margin-bottom:12px;letter-spacing:-.3px;}
-  .sec-head p{color:var(--muted);font-size:16px;}
-
-  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px;}
-  .card{
-    background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
-    padding:28px;transition:transform .15s ease, box-shadow .15s ease;
-  }
-  .card:hover{transform:translateY(-3px);box-shadow:0 12px 30px rgba(11,18,32,.08);}
-  .card .icon{
-    width:46px;height:46px;border-radius:12px;display:flex;align-items:center;justify-content:center;
-    background:linear-gradient(135deg,rgba(0,94,229,.12),rgba(62,139,255,.12));
-    font-size:22px;margin-bottom:16px;
-  }
-  .card h3{font-size:17px;margin-bottom:8px;}
-  .card p{font-size:14px;color:var(--muted);}
-
-  /* security */
-  .sec-dark{background:linear-gradient(160deg,var(--ink),#14203A);color:#fff;}
-  .sec-dark .sec-head p{color:#A7B4CC;}
-  .sec-dark h2{color:#fff;}
-  .sec-dark .card{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);}
-  .sec-dark .card h3{color:#fff;}
-  .sec-dark .card p{color:#A7B4CC;}
-  .sec-dark .card .icon{background:rgba(62,139,255,.2);}
-
-  /* steps */
-  .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px;counter-reset:step;}
-  .step{position:relative;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:28px 24px;}
-  .step .num{
-    width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--blue),var(--blue-deep));
-    color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;margin-bottom:14px;font-size:16px;
-  }
-  .step h3{font-size:16px;margin-bottom:6px;}
-  .step p{font-size:14px;color:var(--muted);}
-
-  /* download */
-  .dl-box{
-    background:var(--card);border:1px solid var(--border);border-radius:20px;
-    padding:44px;text-align:center;max-width:640px;margin:0 auto;
-    box-shadow:0 20px 50px rgba(11,18,32,.08);
-  }
-  .dl-box h3{font-size:22px;margin-bottom:8px;}
-  .dl-box .meta{color:var(--muted);font-size:14px;margin-bottom:24px;}
-  .dl-box .btn{font-size:16px;padding:14px 32px;}
-
-  /* faq */
-  .faq{max-width:760px;margin:0 auto;}
-  details{
-    background:var(--card);border:1px solid var(--border);border-radius:12px;
-    margin-bottom:12px;padding:0 22px;
-  }
-  details summary{
-    cursor:pointer;font-weight:600;font-size:15px;padding:18px 0;list-style:none;
-    display:flex;justify-content:space-between;align-items:center;
-  }
-  details summary::after{content:"+";font-size:20px;color:var(--blue);transition:transform .15s ease;}
-  details[open] summary::after{transform:rotate(45deg);}
-  details p{padding:0 0 18px;font-size:14px;color:var(--muted);}
-
-  footer{border-top:1px solid var(--border);padding:40px 0;text-align:center;font-size:13px;color:var(--muted);}
-  footer .f-brand{display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:8px;color:var(--ink);font-weight:600;font-size:15px;}
-  footer img{height:22px;width:22px;border-radius:5px;}
-
-  @media(max-width:640px){
-    h1{font-size:32px;}
-    .nav-links{display:none;}
-    .hero{padding:56px 0 48px;}
-    section{padding:44px 0;}
-  }
-</style>
+<link rel="stylesheet" href="assets/site.css">
+<script src="assets/site.js" defer></script>
+<link rel="canonical" href="https://buyer.lttlt.top/">
+<meta name="theme-color" content="#F6F8FC">
 </head>
 <body>
+<a class="skip" href="#main">跳到主要内容</a>
 
-<nav>
+<nav class="site-nav" aria-label="主导航">
   <div class="wrap nav-inner">
     <a class="brand" href="#top">
-      <img src="assets/logo-icon.png?v=34a7611" alt="灵兔">
-      <span>灵兔 <small>LTTLT</small></span>
+      <img src="assets/logo-icon.png?v=34a7611" alt="电商平台采购订单导出">
+      <span>电商平台采购订单导出</span>
     </a>
     <div class="nav-links">
       <a href="#features">功能</a>
       <a href="#security">数据安全</a>
-      <a href="#usage">使用步骤</a>
+      <a href="guide.html">使用教程</a>
+      <a href="https://github.com/907609732/lingtu-order-export" target="_blank" rel="noopener noreferrer">GitHub ↗</a>
       <a href="#faq">常见问题</a>
       <a class="btn" style="padding:9px 18px;font-size:14px;" href="#download">免费下载</a>
     </div>
   </div>
 </nav>
 
-<header class="hero" id="top">
+<main id="main"><header class="hero" id="top">
   <div class="wrap">
-    <img class="hero-logo" src="assets/logo.png?v=34a7611" alt="灵兔 Logo">
-    <h1>电商平台 <span class="grad">买家订单导出工具</span></h1>
-    <p class="sub">把你在淘宝、1688、拼多多、京东、闲鱼等平台的买家订单，一键采集导出成 Excel / CSV。本机运行，不碰账号密码，不上传订单数据。</p>
+    <img class="hero-logo" src="assets/logo.png?v=34a7611" alt="电商平台采购订单导出 Logo">
+    <h1>电商平台 <span class="grad">采购订单导出</span></h1>
+    <p class="sub">把你在淘宝、1688、拼多多、京东、闲鱼等平台的买家历史订单，按日期采集并导出成 Excel / CSV。支持商品图片与订单明细，订单数据保存在本机。</p>
     <div class="cta-row">
       <a class="btn" href="#download">免费下载 Windows 版</a>
-      <a class="btn ghost" href="#usage">查看使用步骤</a>
+      <a class="btn ghost" href="guide.html">查看图文教程</a>
     </div>
-    <div class="version">当前版本 <b>v0.1.9</b> · 开发验证版，功能持续更新</div>
+    <div class="version">Windows 本机运行 · Excel / CSV · 商品图片与订单明细</div>
 
-    <div class="platforms">
+    <div class="platforms" id="platforms">
       <div class="label">支持平台</div>
       <div class="chips">
-        <span class="chip">淘宝 / 天猫</span>
-        <span class="chip">1688</span>
-        <span class="chip">拼多多</span>
-        <span class="chip">京东</span>
-        <span class="chip">闲鱼</span>
-        <span class="chip">得物</span>
-        <span class="chip">快手</span>
-        <span class="chip">饿了么</span>
-        <span class="chip">美团</span>
+        <a class="chip" href="#platform-status"><img src="assets/platforms/taobao.ico" width="22" height="22" alt="" aria-hidden="true">淘宝 / 天猫</a>
+        <a class="chip" href="#platform-status"><img src="assets/platforms/ali1688.ico" width="22" height="22" alt="" aria-hidden="true">1688</a>
+        <a class="chip" href="#platform-status"><img src="assets/platforms/pdd.ico" width="22" height="22" alt="" aria-hidden="true">拼多多</a>
+        <a class="chip" href="#platform-status"><img src="assets/platforms/jd.ico" width="22" height="22" alt="" aria-hidden="true">京东</a>
+        <a class="chip" href="#platform-status"><img src="assets/platforms/goofish.ico" width="22" height="22" alt="" aria-hidden="true">闲鱼</a>
+        <a class="chip" href="#platform-status"><img src="assets/platforms/dewu-app.png" width="22" height="22" alt="" aria-hidden="true">得物</a>
+        <a class="chip" href="#platform-status"><img src="assets/platforms/kuaishou.ico" width="22" height="22" alt="" aria-hidden="true">快手</a>
+        <a class="chip" href="#platform-status"><img src="assets/platforms/eleme.ico" width="22" height="22" alt="" aria-hidden="true">饿了么</a>
+        <a class="chip" href="#platform-status"><img src="assets/platforms/meituan.ico" width="22" height="22" alt="" aria-hidden="true">美团</a>
       </div>
+      <p class="platform-note">九大平台 · 历史订单采集 · Excel / CSV 带图导出</p>
     </div>
   </div>
 </header>
@@ -219,8 +74,8 @@
       </div>
       <div class="card">
         <div class="icon">🧩</div>
-        <h3>九大平台覆盖</h3>
-        <p>淘宝/天猫、1688、拼多多、京东、闲鱼、得物、快手、饿了么、美团，每个平台独立登录。</p>
+        <h3>多平台订单导出</h3>
+        <p>淘宝 / 天猫、1688、拼多多、京东、闲鱼、得物、快手、饿了么、美团，各平台独立登录与导出。</p>
       </div>
       <div class="card">
         <div class="icon">📊</div>
@@ -236,6 +91,7 @@
   </div>
 </section>
 
+<section id="screenshots" class="screen-section"><div class="wrap"><div class="sec-head"><h2>软件界面</h2><p>从多平台历史订单，到清楚的商品明细与导出文件。</p></div><div class="screenshot-grid"><figure><button class="zoom" data-image="assets/export-demo.png" data-caption="采集导出台 · 合成演示数据" aria-label="放大采集导出台截图"><img src="assets/export-demo.png" width="2560" height="1392" alt="多平台订单工作台，选择下单日期后采集并导出订单" loading="lazy"></button><figcaption>选择平台与日期，采集并导出历史订单</figcaption></figure><figure><button class="zoom" data-image="assets/table-demo.png" data-caption="订单大表 · 合成演示数据" aria-label="放大订单大表截图"><img src="assets/table-demo.png" width="2480" height="1240" alt="订单明细表，包含商品、规格、金额、物流及筛选" loading="lazy"></button><figcaption>查看商品明细、搜索筛选、展开订单详情</figcaption></figure></div><p class="section-note">软件截图使用合成演示数据。选择平台、采集历史订单、查看明细，再导出为自己的表格。</p></div></section>
 <section id="security" class="sec-dark">
   <div class="wrap">
     <div class="sec-head">
@@ -246,17 +102,17 @@
       <div class="card">
         <div class="icon">🔒</div>
         <h3>订单不上传</h3>
-        <p>订单与登录状态一律不上传服务器，网络访问仅用于官方平台页面、接口和商品图片。</p>
+        <p>订单与登录状态保存在本机，不上传到自建服务器。平台登录、采集和商品图片会访问相应官方服务。</p>
       </div>
       <div class="card">
         <div class="icon">💻</div>
         <h3>本机运行</h3>
-        <p>数据保存在本机 AppData，导出文件按平台分目录并附时间戳，完全本地化。</p>
+        <p>任务和已采集订单保存在本机。导出文件按平台分目录并附时间戳，便于继续处理与留档。</p>
       </div>
       <div class="card">
         <div class="icon">🛡️</div>
         <h3>官方页面内登录</h3>
-        <p>不接触你的账号密码，在平台官方页面自行登录，登录态由各平台独立管理。</p>
+        <p>在平台官方页面自行完成扫码、短信等登录验证，各平台独立管理登录状态。</p>
       </div>
       <div class="card">
         <div class="icon">🚫</div>
@@ -264,6 +120,7 @@
         <p>排查日志不写入账号、订单号、订单正文、Cookie、Token、收货信息或接口响应。</p>
       </div>
     </div>
+    <p class="security-note">其他联网行为：GitHub 更新检查，以及匿名启动统计（随机设备编号、版本与时间）；不包含账号、订单或收货信息。官网不额外接入访问统计。</p>
   </div>
 </section>
 
@@ -271,13 +128,13 @@
   <div class="wrap">
     <div class="sec-head">
       <h2>三步搞定</h2>
-      <p>从安装到导出，几分钟完成。</p>
+      <p>选平台、选日期、导出表格，先用短日期范围核对结果。</p>
     </div>
     <div class="steps">
       <div class="step">
         <div class="num">1</div>
         <h3>安装并打开</h3>
-        <p>运行安装包，打开桌面的「灵兔 AI 电商平台买家订单导出工具」。</p>
+        <p>运行安装包，打开桌面的「电商平台采购订单导出」。</p>
       </div>
       <div class="step">
         <div class="num">2</div>
@@ -296,10 +153,14 @@
 <section id="download">
   <div class="wrap">
     <div class="dl-box">
-      <img class="hero-logo" src="assets/logo.png?v=34a7611" alt="灵兔" style="width:64px;height:64px;margin-bottom:18px;">
-      <h3>下载灵兔 AI 订单导出工具</h3>
-      <p class="meta">Windows x64 · 安装包 LingtuOrderExport-0.1.9-Setup.exe · 免费</p>
-      <a class="btn" href="https://github.com/907609732/lingtu-order-export/releases/download/v0.1.9/LingtuOrderExport-0.1.9-Setup.exe" target="_blank" rel="noopener">立即下载</a>
+      <img class="hero-logo" src="assets/logo.png?v=34a7611" alt="电商平台采购订单导出" style="width:64px;height:64px;margin-bottom:18px;">
+      <h3>下载电商平台采购订单导出</h3>
+      <p class="meta">Windows x64 · 免费下载 · 多平台订单导出<br><strong data-version>请查看发布页</strong><span data-size></span><br><span data-filename>安装包信息以 GitHub Release 为准</span></p>
+      <a class="btn download-link" href="https://github.com/907609732/lingtu-order-export/releases/latest" target="_blank" rel="noopener noreferrer">免费下载 Windows 版</a>
+      <a class="netdisk-link" hidden target="_blank" rel="noopener noreferrer">网盘备用下载 ↗</a>
+      <div class="download-links"><a href="https://github.com/907609732/lingtu-order-export" target="_blank" rel="noopener noreferrer">GitHub 仓库 ↗</a><a href="https://github.com/907609732/lingtu-order-export/releases" target="_blank" rel="noopener noreferrer">历史版本 ↗</a><a href="guide.html">图文教程 ↗</a></div>
+      <p class="section-note">安装包未配置代码签名，Windows 可能提示未知发布者。请核对来源后决定是否安装。</p>
+      <details class="checksum" hidden><summary>安装包 SHA-256</summary><code data-checksum></code></details>
       <p class="meta" style="margin-top:16px;">软件内自动检查更新，也可在「保存与设置」手动检查。</p>
     </div>
   </div>
@@ -311,13 +172,13 @@
       <h2>常见问题</h2>
     </div>
     <div class="faq">
-      <details>
+      <details id="platform-status">
         <summary>支持哪些平台？</summary>
-        <p>淘宝/天猫、1688、拼多多、京东、闲鱼支持官方登录页采集；得物、快手、饿了么、美团的微信小程序采集使用本机辅助代理。</p>
+        <p>支持淘宝 / 天猫、1688、拼多多、京东、闲鱼、得物、快手、饿了么、美团。前五个平台使用官方平台页面；后四个平台通过微信小程序辅助采集，首次使用请按软件内教程配置证书与代理，完成后恢复原代理设置。</p>
       </details>
       <details>
         <summary>我的订单数据安全吗？</summary>
-        <p>订单与登录状态不上传任何服务器，数据保存在本机。网络访问仅用于官方平台页面、接口和商品图片。</p>
+        <p>订单与登录状态保存在本机，不上传到自建服务器。软件会访问官方平台与商品图片、GitHub 更新接口，并上报匿名启动统计（随机设备编号、版本与时间）。不包含账号、订单或收货信息。</p>
       </details>
       <details>
         <summary>导出格式是什么？</summary>
@@ -331,19 +192,24 @@
         <summary>如何更新软件？</summary>
         <p>启动时后台自动检查新版本，发现新版本会在界面顶部提示，可一键前往下载，不影响正常使用。</p>
       </details>
-    </div>
+      <details><summary>表格筛选后，只会导出筛选结果吗？</summary><p>表格筛选只影响浏览，“导出文件”导出当前任务全部订单。需要限定日期时，请在采集前设置下单日期范围。财务对账还需结合付款、退款与平台账单。</p></details>
+    </div><div class="feedback"><a href="guide.html#troubleshooting">查看异常处理教程 ↗</a><a href="https://github.com/907609732/lingtu-order-export/issues" target="_blank" rel="noopener noreferrer">GitHub 问题反馈 ↗</a><p>反馈前请遮挡账号、订单号、收货信息与本机路径。</p></div>
   </div>
 </section>
-
+</main>
 <footer>
   <div class="wrap">
     <div class="f-brand">
-      <span>五成</span>
+      <img src="assets/logo-icon.png?v=34a7611" alt=""><span>电商平台采购订单导出 · BY 五成</span>
     </div>
-    <p>灵兔 AI 电商平台买家订单导出工具 · v0.1.9 · 开发验证版</p>
+    <p>电商平台采购订单导出 · BY 五成</p>
     <p>五成电子商务集团 · buyer.lttlt.top</p>
   </div>
+
+<!-- wucheng-icp-footer: verified in Aliyun filing console -->
+<div id="wucheng-icp-footer" role="contentinfo" style="display:block;clear:both;box-sizing:border-box;width:100%;text-align:center;padding:12px 8px;font:12px/1.8 sans-serif;background:#f7f7f7;color:#555;"><a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:none;display:inline-block;padding:4px 8px;">浙ICP备2026045099号-1</a></div>
 </footer>
 
+<dialog class="lightbox" aria-label="软件截图预览"><button class="close-lightbox" aria-label="关闭截图预览">关闭 ×</button><img alt=""><p></p></dialog>
 </body>
 </html>

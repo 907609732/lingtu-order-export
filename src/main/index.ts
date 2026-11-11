@@ -18,7 +18,7 @@ import { checkLatest,compareVersions } from './updater'
 import { reportLaunch } from './analytics'
 import {chooseUserData} from './user-data'
 const root=dirname(fileURLToPath(import.meta.url))
-app.setName('灵兔 AI 电商平台买家订单导出工具')
+app.setName('电商平台采购订单导出')
 if(process.env.ORDERDESK_TEST_DATA)app.setPath('userData',resolve(process.env.ORDERDESK_TEST_DATA))
 else app.setPath('userData',chooseUserData(app.getPath('appData')))
 let store:Store,collector:Collector,proxy:OrderProxy,win:BrowserWindow,diagnostics:Diagnostics,journal:ExecutionLog;let exporting=false
@@ -52,7 +52,7 @@ app.whenReady().then(async()=>{
   if(store.setting('loggingEnabled')==='true')try{diagnostics.setEnabled(true)}catch{/* The settings screen exposes log storage failures. */}
   diagnostics.event('app.start',{version:app.getVersion()})
   Menu.setApplicationMenu(null)
-  win=new BrowserWindow({width:1320,height:870,minWidth:1120,minHeight:740,show:false,title:'灵兔 AI 电商平台买家订单导出工具',backgroundColor:'#f5f5f7',titleBarStyle:'hidden',...(process.platform==='win32'?{titleBarOverlay:{color:'#f5f5f7',symbolColor:'#52525b',height:44}}:{}),icon:nativeImage.createFromPath(join(root,'../../build/icon.png')),webPreferences:{preload:join(root,'../preload/index.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}})
+  win=new BrowserWindow({width:1320,height:870,minWidth:1120,minHeight:740,show:false,title:'电商平台采购订单导出',backgroundColor:'#f5f5f7',titleBarStyle:'hidden',...(process.platform==='win32'?{titleBarOverlay:{color:'#f5f5f7',symbolColor:'#52525b',height:44}}:{}),icon:nativeImage.createFromPath(join(root,'../../build/icon.png')),webPreferences:{preload:join(root,'../preload/index.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}})
   win.webContents.setWindowOpenHandler(()=>({action:'deny'}));win.webContents.on('will-navigate',e=>e.preventDefault())
   win.webContents.on('render-process-gone',(_e,d)=>diagnostics.event('renderer.gone',{reason:d.reason,exitCode:d.exitCode},undefined,'error'))
   win.webContents.on('preload-error',(_e,_path,error)=>diagnostics.event('renderer.preload_failed',{},error))
@@ -105,7 +105,7 @@ app.whenReady().then(async()=>{
   if(process.env.ELECTRON_RENDERER_URL)await win.loadURL(process.env.ELECTRON_RENDERER_URL);else await win.loadFile(join(root,'../renderer/index.html'))
   win.show()
   if(process.env.ORDERDESK_SCREENSHOT){setTimeout(async()=>{await writeFile(process.env.ORDERDESK_SCREENSHOT!,(await win.webContents.capturePage()).toPNG())},2000)}
-}).catch(error=>{diagnostics?.event('app.start_failed',{},error);dialog.showErrorBox('灵兔 AI 电商平台买家订单导出工具启动失败',error instanceof Error?error.message:'无法初始化本机数据');app.quit()})
+}).catch(error=>{diagnostics?.event('app.start_failed',{},error);dialog.showErrorBox('电商平台采购订单导出启动失败',error instanceof Error?error.message:'无法初始化本机数据');app.quit()})
 process.on('unhandledRejection',error=>diagnostics?.event('app.unhandled_rejection',{},error))
 process.on('uncaughtExceptionMonitor',error=>diagnostics?.event('app.uncaught_exception',{},error))
 app.on('window-all-closed',()=>app.quit())

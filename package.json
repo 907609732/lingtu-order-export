@@ -1,7 +1,7 @@
 {
   "name": "lingtu-order-export",
-  "version": "0.1.20",
-  "description": "灵兔 AI 电商平台买家订单导出",
+  "version": "0.1.21",
+  "description": "电商平台采购订单导出",
   "author": "Local Order Desk",
   "private": true,
   "type": "module",
@@ -39,7 +39,7 @@
   "build": {
     "electronDist": "node_modules/electron/dist",
     "appId": "com.lingtu.order-export",
-    "productName": "灵兔 AI 电商平台买家订单导出工具",
+    "productName": "电商平台采购订单导出",
     "directories": {
       "output": "release"
     },
@@ -61,7 +61,7 @@
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "shortcutName": "灵兔 AI 电商平台买家订单导出工具",
+      "shortcutName": "电商平台采购订单导出",
       "deleteAppDataOnUninstall": false
     }
   },
