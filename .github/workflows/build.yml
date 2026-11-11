@@ -1,7 +1,7 @@
 name: Build Windows
 on:
   push:
-    branches: ['codex/rename-procurement-export']
+    branches: ['master', 'codex/rename-procurement-export']
   workflow_dispatch:
 permissions:
   contents: read
@@ -16,6 +16,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci --no-audit --no-fund
+      - run: New-Item -ItemType Directory -Force .test-output | Out-Null
+      - run: node node_modules/electron/install.js
       - run: npm test
       - run: npm run dist
         env:
