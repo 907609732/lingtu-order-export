@@ -1,4 +1,4 @@
-# 灵兔官网
+# 电商平台采购订单导出官网
 
 生产地址：https://buyer.lttlt.top/ 。现有阿里云主机 `aliyun-erp`，网站发布入口 `/var/www/buyer.lttlt.top/current`（旧站备份仍保留）。纯静态 HTML/CSS/JS，不需要安装额外依赖或后台。
 
@@ -18,7 +18,7 @@ netdiskUrl 与 netdiskCode 默认为空，不显示备用下载按钮。收到�
 
 ## 验证与部署
 
-在仓库根目录运行 `node tests/website-check.mjs`，验证两页本地资源、锚点、九个平台图标与下载版本一致性。浏览器检查响应式布局、截图弹窗、导航、无脚本回退和减少动态效果。软件关于入口验证：`node tests/about-links-smoke.mjs`（先 `npm.cmd run build`）。
+检查两页本地资源、锚点、九个平台图标与下载版本一致性。浏览器检查响应式布局、截图弹窗、导航、无脚本回退和减少动态效果。软件关于入口验证：`node tests/about-links-smoke.mjs`（先 `npm.cmd run build`）。
 
 本地预览经用户确认后，已按用户明确要求发布到现有官网。下方为部署与恢复说明。
 
