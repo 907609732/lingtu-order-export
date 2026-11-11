@@ -1,0 +1,52 @@
+name: Publish verified release
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Successful Build Windows run ID
+        required: true
+        default: '43023014616'
+      tag:
+        description: Existing draft release tag
+        required: true
+        default: 'v0.1.21'
+      sha256:
+        description: Expected installer SHA-256
+        required: true
+        default: '3456d0ca372c692300c47d653fb1c3c588d211fd1e24422cb6ab135d339405ac'
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      SOURCE_RUN: ${{ inputs.run_id }}
+      RELEASE_TAG: ${{ inputs.tag }}
+      EXPECTED_SHA: ${{ inputs.sha256 }}
+    steps:
+      - name: Verify build and download installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $run = gh run view $env:SOURCE_RUN --json conclusion,headSha | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $run.conclusion -ne 'success') { throw 'Source build did not succeed' }
+          $release = gh release view $env:RELEASE_TAG --json isDraft,targetCommitish | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or -not $release.isDraft) { throw 'Expected an existing draft release' }
+          if ($release.targetCommitish -ne $run.headSha) { throw 'Release target differs from build source' }
+          gh run download $env:SOURCE_RUN --name procurement-order-export-windows --dir release
+          if ($LASTEXITCODE -ne 0) { throw 'Artifact download failed' }
+          $files = @(Get-ChildItem release/*Setup.exe)
+          if ($files.Count -ne 1) { throw 'Expected one installer' }
+          if ((Get-FileHash $files[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant() -ne $env:EXPECTED_SHA.ToLowerInvariant()) { throw 'Installer checksum mismatch' }
+      - name: Upload and publish verified installer
+        shell: pwsh
+        run: |
+          $file = Get-ChildItem release/*Setup.exe
+          gh release upload $env:RELEASE_TAG $file.FullName
+          if ($LASTEXITCODE -ne 0) { throw 'Release upload failed' }
+          gh release edit $env:RELEASE_TAG --draft=false --latest
+          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed' }
