@@ -11,7 +11,7 @@
     "build": "vue-tsc --noEmit && electron-vite build",
     "start": "electron-vite preview",
     "test": "vitest run",
-    "dist": "npm run build && electron-builder --win nsis --x64",
+    "dist": "npm run build && electron-builder --win nsis --x64 --publish never",
     "check": "npm run test && npm run build"
   },
   "dependencies": {
