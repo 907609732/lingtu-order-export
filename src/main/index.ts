@@ -12,6 +12,7 @@ import { OrderProxy } from './proxy'
 import { Diagnostics } from './diagnostics'
 import { ExecutionLog } from './execution-log'
 import { ExecutionProgress } from './execution-progress'
+import {exportImagePng} from './export-image'
 import type { ExportInput,PlatformId,StartInput,UpdateInfo } from '../shared/types'
 import { WEBSITE_URL,REPOSITORY_URL } from '../shared/config'
 import { checkLatest,compareVersions } from './updater'
@@ -42,8 +43,7 @@ async function imageBytes(url:string):Promise<Buffer>{
   const response=await fetch(u.href,{signal:AbortSignal.timeout(12000),redirect:'error'});if(!response.ok||!response.headers.get('content-type')?.startsWith('image/'))throw new Error('图片读取失败')
   if(Number(response.headers.get('content-length')||0)>6*1024*1024)throw new Error('图片过大')
   const chunks:Uint8Array[]=[];let size=0;for await(const chunk of response.body as any){size+=chunk.length;if(size>6*1024*1024)throw new Error('图片过大');chunks.push(chunk)}
-  const buffer=Buffer.concat(chunks);const image=nativeImage.createFromBuffer(buffer);if(image.isEmpty())throw new Error('图片格式无法读取')
-  const resized=image.resize({width:160}).toPNG();await writeFile(file,resized);return resized
+  const resized=await exportImagePng(Buffer.concat(chunks));await writeFile(file,resized);return resized
 }
 app.whenReady().then(async()=>{
   diagnostics=new Diagnostics(app.getPath('userData'),app.getVersion())
