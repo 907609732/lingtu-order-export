@@ -1,10 +1,38 @@
+<div align="center">
+
+<img src="website/assets/logo-icon.png" width="88" alt="电商平台采购订单导出" />
+
 # 电商平台采购订单导出
+
+**让采购订单有迹可循，让对账归档更简单。**
+
+在 Windows 上采集多平台买家历史订单，整理商品明细，导出 Excel / CSV。
 
 **简体中文** · [English](README.en.md)
 
-在 Windows 电脑上采集你在电商平台的买家历史订单，整理商品明细并导出 Excel / CSV，方便采购管理、对账与归档。
+[![Release](https://img.shields.io/github/v/release/907609732/lingtu-order-export?color=0071e3&label=Release)](https://github.com/907609732/lingtu-order-export/releases/latest)
+[![Windows build](https://github.com/907609732/lingtu-order-export/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/907609732/lingtu-order-export/actions/workflows/build.yml)
+[![Gitee sync](https://github.com/907609732/lingtu-order-export/actions/workflows/sync-gitee.yml/badge.svg?branch=master)](https://github.com/907609732/lingtu-order-export/actions/workflows/sync-gitee.yml)
+![Windows x64](https://img.shields.io/badge/Windows-x64-0078D4)
+![Export](https://img.shields.io/badge/Export-Excel%20%2F%20CSV-16803C)
 
-[官网](https://buyer.lttlt.top/) · [下载 Windows 安装包](https://github.com/907609732/lingtu-order-export/releases/latest) · [图文教程](https://buyer.lttlt.top/guide.html) · [问题反馈](https://github.com/907609732/lingtu-order-export/issues) · [Gitee 镜像](https://gitee.com/chen-yuecai/lingtu-order-export)
+**[下载 Windows 版](https://github.com/907609732/lingtu-order-export/releases/latest)** · [访问官网](https://buyer.lttlt.top/) · [图文教程](https://buyer.lttlt.top/guide.html) · [问题反馈](https://github.com/907609732/lingtu-order-export/issues)
+
+</div>
+
+---
+
+## 产品预览
+
+![订单采集与导出](docs/screenshots/01-export.png)
+
+<p align="center"><sub>截图使用合成演示数据，来自较早版本，部分界面名称与当前版本不同。</sub></p>
+
+| 采集 | 整理 | 导出 |
+| :---: | :---: | :---: |
+| 选择平台与历史日期 | 查看商品明细与缺项 | 保存 Excel / CSV 到本机 |
+
+[主要功能](#主要功能) · [平台接入](#平台与接入方式) · [快速开始](#快速使用) · [数据说明](#数据与网络连接) · [源码运行](#从源码运行)
 
 ## 下载安装
 
@@ -16,11 +44,14 @@
 
 ## 主要功能
 
-- **历史订单采集**：按订单下单日期选择范围，支持按月或按天制定提取计划、暂停与继续。
-- **商品与订单明细**：查看商品、规格、数量、金额、收货和物流信息，支持搜索、筛选及按需提取详情。
-- **Excel / CSV 导出**：Excel 可嵌入商品图片；图片获取失败时保留链接并记录缺项。CSV 为文本格式，不嵌入图片。
-- **本机任务管理**：任务与订单保存在本机，可重新打开、检查并再次导出。
-- **执行日志**：查看采集、详情提取与导出进度，便于定位异常。
+| 能力 | 你可以做什么 |
+| --- | --- |
+| 📅 历史订单采集 | 按下单日期选择范围，按月或按天制定提取计划，暂停与继续。 |
+| 🔎 商品与订单明细 | 查看商品、规格、数量、金额、收货与物流信息，搜索、筛选并按需提取详情。 |
+| 🖼️ 带图 Excel | 将商品图片嵌入表格；图片获取失败时保留链接并记录缺项。 |
+| 📄 CSV 导出 | 输出纯文本表格，便于进一步处理；CSV 不嵌入图片。 |
+| 💾 本机任务管理 | 重新打开已保存任务，检查订单并再次导出。 |
+| 📋 执行日志 | 查看采集、详情提取和导出进度，定位异常。 |
 
 ## 平台与接入方式
 
@@ -41,17 +72,11 @@
 
 小程序辅助采集结束后，按教程恢复原代理设置。
 
-## 软件截图
+## 细节展示
 
-以下截图使用合成演示数据，来自较早版本，界面名称可能与当前版本略有不同。
-
-### 订单采集与导出
-
-![订单采集与导出](docs/screenshots/01-export.png)
-
-### 订单明细与筛选
-
-![订单明细与筛选](docs/screenshots/05-order-table.png)
+| 订单明细与筛选 | 历史任务管理 |
+| --- | --- |
+| ![订单明细](docs/screenshots/05-order-table.png) | ![历史任务](docs/screenshots/04-history.png) |
 
 ## 数据与网络连接
 

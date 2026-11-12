@@ -1,10 +1,38 @@
-# 电商平台采购订单导出
+<div align="center">
+
+<img src="website/assets/logo-icon.png" width="88" alt="电商平台采购订单导出" />
+
+# E-commerce Purchase Order Export
+
+**Your purchase history. Organized, searchable, exportable.**
+
+Collect buyer-side order history on Windows and turn it into Excel / CSV.
 
 [简体中文](README.md) · **English**
 
-**E-commerce Purchase Order Export** is a Windows desktop application for collecting your buyer-side order history, organizing item details, and exporting Excel or CSV files for purchasing records, reconciliation, and archiving.
+[![Release](https://img.shields.io/github/v/release/907609732/lingtu-order-export?color=0071e3&label=Release)](https://github.com/907609732/lingtu-order-export/releases/latest)
+[![Windows build](https://github.com/907609732/lingtu-order-export/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/907609732/lingtu-order-export/actions/workflows/build.yml)
+[![Gitee sync](https://github.com/907609732/lingtu-order-export/actions/workflows/sync-gitee.yml/badge.svg?branch=master)](https://github.com/907609732/lingtu-order-export/actions/workflows/sync-gitee.yml)
+![Windows x64](https://img.shields.io/badge/Windows-x64-0078D4)
+![Export](https://img.shields.io/badge/Export-Excel%20%2F%20CSV-16803C)
 
-[Website](https://buyer.lttlt.top/) · [Download for Windows](https://github.com/907609732/lingtu-order-export/releases/latest) · [Illustrated guide (Chinese)](https://buyer.lttlt.top/guide.html) · [Report an issue](https://github.com/907609732/lingtu-order-export/issues) · [Gitee mirror](https://gitee.com/chen-yuecai/lingtu-order-export)
+**[Download for Windows](https://github.com/907609732/lingtu-order-export/releases/latest)** · [Website](https://buyer.lttlt.top/) · [Guide (中文)](https://buyer.lttlt.top/guide.html) · [Report an issue](https://github.com/907609732/lingtu-order-export/issues)
+
+</div>
+
+---
+
+## Product preview
+
+![Order collection and export](docs/screenshots/01-export.png)
+
+<p align="center"><sub>Synthetic demonstration data from an earlier version; some labels differ from the current release.</sub></p>
+
+| Collect | Review | Export |
+| :---: | :---: | :---: |
+| Choose a platform and date range | Inspect items and missing fields | Save Excel / CSV locally |
+
+[Features](#features) · [Platforms](#platforms-and-collection-methods) · [Quick start](#quick-start) · [Data & privacy](#data-and-network-connections) · [Development](#run-from-source)
 
 ## Download and install
 
@@ -16,11 +44,14 @@ Existing order and login data directories remain compatible. Back up important e
 
 ## Features
 
-- **Order history collection:** select a range by order date, create monthly or daily extraction plans, and pause or resume collection.
-- **Item and order details:** inspect products, variants, quantities, amounts, shipping addresses, and logistics information; search, filter, and extract details as needed.
-- **Excel and CSV exports:** Excel can embed product images. Failed image downloads retain links and are recorded as missing data. CSV is text-only and does not embed images.
-- **Local task management:** store tasks and orders on your computer, reopen them, review the results, and export again.
-- **Execution logs:** follow collection, detail extraction, and export progress to investigate problems.
+| Capability | What you can do |
+| --- | --- |
+| 📅 Historical collection | Select order dates, create daily or monthly extraction plans, pause and resume. |
+| 🔎 Order details | Review products, variants, quantities, amounts, addresses and logistics; search and filter results. |
+| 🖼️ Excel with images | Embed product images in Excel; retain image links and record missing data when downloads fail. |
+| 📄 CSV export | Export text-only tables for further processing. CSV does not embed images. |
+| 💾 Local tasks | Reopen saved tasks, review collected orders and export again. |
+| 📋 Execution logs | Follow collection, detail extraction and export progress. |
 
 ## Platforms and collection methods
 
@@ -41,17 +72,11 @@ These are the platform entries offered by the application. They do not mean that
 
 After assisted Mini Program collection, restore your original proxy settings as described in the guide.
 
-## Screenshots
+## A closer look
 
-These screenshots contain synthetic demonstration data and were taken in an earlier version. Some interface labels may differ from the current release.
-
-### Order collection and export
-
-![Order collection and export](docs/screenshots/01-export.png)
-
-### Order details and filtering
-
-![Order details and filtering](docs/screenshots/05-order-table.png)
+| Order details and filtering | Task history |
+| --- | --- |
+| ![Order table](docs/screenshots/05-order-table.png) | ![Task history](docs/screenshots/04-history.png) |
 
 ## Data and network connections
 
