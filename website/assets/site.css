@@ -125,6 +125,12 @@
   .dl-box .meta{color:var(--muted);font-size:14px;margin-bottom:24px;}
   .dl-box .btn{font-size:16px;padding:14px 32px;}
 
+  .more-downloads{max-width:320px;margin:16px auto 0;padding:0 18px;text-align:left;}
+  .more-downloads summary{font-size:14px;color:var(--blue);padding:12px 0;}
+  .download-options{padding-bottom:16px;}
+  .download-options .netdisk-link{display:block;margin:0;padding:12px;border-radius:8px;background:var(--bg);font-size:14px;line-height:1.8;color:var(--blue);}
+  .download-options .netdisk-link span{display:block;font-size:12px;color:var(--muted);}
+
   /* faq */
   .faq{max-width:760px;margin:0 auto;}
   details{

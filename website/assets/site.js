@@ -28,7 +28,7 @@ async function loadRelease() {
     });
     if (release.netdiskUrl) { const backup = new URL(release.netdiskUrl);
       if (backup.protocol === 'https:') document.querySelectorAll('.netdisk-link').forEach(el => {
-        el.href = backup.href; el.textContent = '网盘备用下载 ↗' + (release.netdiskCode ? ` · 提取码 ${release.netdiskCode}` : ''); el.hidden = false;
+        el.href = backup.href; el.textContent = '百度网盘 ↗' + (release.netdiskCode ? ` · 提取码 ${release.netdiskCode}` : ''); el.hidden = false;
       });
     }
   } catch { /* Preserve the working GitHub Releases fallback. */ }
