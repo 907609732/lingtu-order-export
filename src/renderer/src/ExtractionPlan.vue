@@ -20,9 +20,7 @@ watch(candidates,items=>{selected.value=granularity.value==='month'?[]:items.map
 watch(()=>props.modelValue,open=>{if(open){
  const input=props.selection
  range.value=[input?.from||props.from,input?.to||props.to];year.value=(input?.to||props.to).slice(0,4)
- const fullMonths=new Set(dateSegments(year.value+'-01-01',year.value+'-12-31','month').map(key))
- const singleYear=!input?.plan||input.plan.segments.every(s=>fullMonths.has(key(s)))
- granularity.value=props.allowPlan?(input?.plan&&singleYear?input.plan.granularity:input?'day':'month'):'day'
+ granularity.value=props.allowPlan?'month':'day'
  selected.value=input?.plan?candidates.value.filter(s=>input.plan!.segments.some(part=>s.from>=part.from&&s.to<=part.to)).map(key):granularity.value==='day'?candidates.value.map(key):[]
 }})
 function toggle(id:string){selected.value=selected.value.includes(id)?selected.value.filter(s=>s!==id):[...selected.value,id]}
