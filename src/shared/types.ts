@@ -24,7 +24,7 @@ export interface Task {
   jdDetailExport?:{year:number;nextPage:number;updated?:number}
   detailExport?: {requestedAt:string;previous:string[];token?:string}
   id: string; platform: PlatformId; account: string; from: string; to: string; status: TaskStatus; createdAt: string; updatedAt: string
-  count: number; pages: number; message: string; cursor: string; exportedPath: string; accountKey?: string; accountCookie?:string; operation?:'list'|'details'; listOutcome?:ListOutcome; plan?:ExtractionPlan
+  count: number; pages: number; message: string; cursor: string; exportedPath: string; accountKey?: string; accountCookie?:string; operation?:'list'|'details'; activityPhase?:'list'|'details'; listOutcome?:ListOutcome; plan?:ExtractionPlan
 }
 export interface StartInput { platform: PlatformId; from: string; to: string; plan?:PlanInput }
 export interface ExportInput { taskId: string; format: 'xlsx' | 'csv'; images: boolean }

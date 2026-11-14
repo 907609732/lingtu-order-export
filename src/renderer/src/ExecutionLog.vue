@@ -4,7 +4,7 @@ import type { ExecutionEntry,PlatformId } from '../../shared/types'
 const props=defineProps<{platform:PlatformId;compact?:boolean}>()
 const collapsed=ref(!!props.compact)
 const panel=ref<HTMLElement>()
-defineExpose({reveal:()=>{collapsed.value=false;void nextTick(()=>panel.value?.scrollIntoView({block:'nearest',behavior:'smooth'}))}})
+defineExpose({reveal:(scroll=true)=>{collapsed.value=false;if(scroll)void nextTick(()=>panel.value?.scrollIntoView({block:'nearest',behavior:'smooth'}))}})
 watch(()=>props.compact,value=>{collapsed.value=!!value})
 const entries=ref<ExecutionEntry[]>([]),follow=ref(true),box=ref<HTMLElement>(),hint=ref('')
 const labels={info:'进行',success:'成功',warning:'提示',error:'错误'}

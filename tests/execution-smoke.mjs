@@ -14,7 +14,7 @@ const response=page=>({data:{data:{
   item:{tag:'orderItemInfo',id:'90000000000000'+page+'_1',fields:{orderId:'90000000000000'+page,item:{itemId:'1',title:'PRIVATE_PRODUCT',quantity:1}}},
   pagination:{fields:{currentPage:page,pageSize:1,totalNum:2}}
 },global:{pageControl:{emptyPage:false}}}})
-async function launch(){app=await electron.launch({executablePath:resolve('node_modules/electron/dist/electron.exe'),args:['.'],env,timeout:45000});const page=await app.firstWindow();await page.getByRole('heading',{name:'淘宝 / 天猫订单导出'}).waitFor();return page}
+async function launch(){app=await electron.launch({executablePath:resolve('node_modules/electron/dist/electron.exe'),args:['.'],env,timeout:45000});const page=await app.firstWindow();await page.getByRole('heading',{name:'淘宝 / 天猫订单导出'}).waitFor();await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(1120,740));return page}
 try{
   let page=await launch()
   const live=page.getByRole('log',{name:'实时执行日志',includeHidden:true})
@@ -31,6 +31,8 @@ try{
   await page.getByRole('button',{name:/^② (?:开始|重置)采集$/}).click()
   await expect(live).toContainText('正在读取2026 年10 月第 1 页订单')
   await expect(live).toBeVisible()
+  await expect(page.getByRole('status',{name:'采集活动'})).toContainText('正在采集订单')
+  const activityBox=await page.getByRole('status',{name:'采集活动'}).boundingBox();const topbarBox=await page.locator('.topbar').boundingBox();assert.ok(activityBox.y>=topbarBox.y+topbarBox.height&&activityBox.y+activityBox.height<=await page.evaluate(()=>innerHeight),'loading stays in the first viewport after start')
   assert.equal((await page.evaluate(()=>window.desk.state())).tasks[0].status,'running')
   await expect(live).toContainText('已等待 10 秒',{timeout:22000})
   await page.screenshot({path:join(root,'live-wait.png')})

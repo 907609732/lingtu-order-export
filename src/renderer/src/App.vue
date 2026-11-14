@@ -4,6 +4,7 @@ import type { AppState,Order,PlatformId,Task,StartInput } from '../../shared/typ
 import ExtractionPlan from './ExtractionPlan.vue'
 import {planPlatforms,detailPlatforms,pendingDetails,shouldHighlightDetails} from '../../core/extraction-plan'
 import ExecutionLog from './ExecutionLog.vue'
+import CollectionActivity from './CollectionActivity.vue'
 import OrderTable from './OrderTable.vue'
 import SupportAuthor from './SupportAuthor.vue'
 import UpdatePanel from './UpdatePanel.vue'
@@ -34,6 +35,7 @@ const detailHighlight=computed(()=>shouldHighlightDetails(task.value,records.val
 const platform=computed(()=>state.value?.platforms.find(p=>p.id===selected.value))
 const tasks=computed(()=>state.value?.tasks.filter(t=>t.platform===selected.value)||[])
 const task=computed(()=>state.value?.tasks.find(t=>t.id===taskId.value))
+const activityVisible=computed(()=>!!task.value&&(['running','paused','needs_login','failed'].includes(task.value.status)||(task.value.status==='partial'&&!!task.value.listOutcome&&task.value.listOutcome!=='complete')))
 const emptyResult=computed(()=>task.value?.status==='completed'&&task.value.count===0)
 const filtered=computed(()=>records.value.filter(o=>(o.id+' '+o.shop+' '+o.items.map(i=>i.title).join(' ')).includes(query.value)))
 const shown=computed(()=>filtered.value.slice((page.value-1)*30,page.value*30))
@@ -46,8 +48,8 @@ async function selectPlatform(id:PlatformId){planOpen.value=false;if(state.value
 async function clearPlatform(){const id=selected.value,name=platform.value?.name;await action(async()=>{if(await desk.clear(id)){if(selected.value===id){taskId.value='';records.value=[];query.value='';page.value=1;delete timeSelections.value[id];restoreTime();planOpen.value=false}notice.value=`已清理 ${name} 的本机采集缓存，已导出的文件保留。`}})}
 async function openPage(){await action(async()=>{await desk.login(selected.value);pageOpen.value=true})}
 async function hidePage(){await desk.hidePage();pageOpen.value=false}
-async function start(){const input=collectionTime.value;if(!input||collectionRunning.value)return;await action(async()=>{const t=await desk.start({platform:selected.value,from:input.from,to:input.to,...(input.plan?{plan:{granularity:input.plan.granularity,segments:input.plan.segments.map(s=>({from:s.from,to:s.to}))}}:{})});taskId.value=t.id;page.value=1;await nextTick();executionPanel.value?.reveal()})}
-async function enrich(){await action(async()=>{await desk.enrichDetails(taskId.value);await nextTick();executionPanel.value?.reveal()})}
+async function start(){const input=collectionTime.value;if(!input||collectionRunning.value)return;await action(async()=>{const t=await desk.start({platform:selected.value,from:input.from,to:input.to,...(input.plan?{plan:{granularity:input.plan.granularity,segments:input.plan.segments.map(s=>({from:s.from,to:s.to}))}}:{})});taskId.value=t.id;page.value=1;await nextTick();executionPanel.value?.reveal(false)})}
+async function enrich(){await action(async()=>{await desk.enrichDetails(taskId.value);await nextTick();executionPanel.value?.reveal(false)})}
 async function openOrder(orderId:string){await action(async()=>{await desk.openOrder(taskId.value,orderId);pageOpen.value=true})}
 async function chooseTask(event:Event){const id=(event.target as HTMLSelectElement).value,t=tasks.value.find(t=>t.id===id);if(t)await openTask(t)}
 async function exportFile(){await action(async()=>{if(!state.value?.outputDir){await hidePage();await desk.chooseDirectory()};await nextTick();executionPanel.value?.reveal();const r=await desk.export({taskId:taskId.value,format:format.value,images:images.value});notice.value=`已导出 ${r.count} 笔订单${r.missing?`，附 ${r.missing} 项核对说明`:''}。文件已保存到所选目录。`})}
@@ -60,12 +62,12 @@ async function openUpdate(){await navigate('settings');await nextTick();const pa
 function openWebsite(){void desk.openWebsite()}
 function openContact(){void action(()=>desk.openContact())}
 function openRepository(){void desk.openRepository()}
-onMounted(async()=>{await action(async()=>{await refresh();const latest=tasks.value[0];if(latest)await openTask(latest)});off=desk.onChange(()=>{if(refreshPending)return;refreshPending=true;setTimeout(()=>{refreshPending=false;void refresh()},250)});offUpdate=desk.onUpdate(()=>{void refresh()})})
+onMounted(async()=>{await action(async()=>{await refresh();const latest=state.value?.tasks.find(t=>t.status==='running')||tasks.value[0];if(latest)await openTask(latest)});off=desk.onChange(()=>{if(refreshPending)return;refreshPending=true;setTimeout(()=>{refreshPending=false;void refresh()},250)});offUpdate=desk.onUpdate(()=>{void refresh()})})
 onUnmounted(()=>{off?.();offUpdate?.()})
 </script>
 
 <template>
-  <div class="app-shell" :style="{'--workspace-extra-height':`${(task?.plan?36:0)+(detailHighlight?40:0)}px`}" :class="{'data-workspace':section==='export'}">
+  <div class="app-shell" :style="{'--workspace-extra-height':`${(task?.plan?36:0)+(detailHighlight?40:0)+(activityVisible?88:0)}px`}" :class="{'data-workspace':section==='export'}">
     <aside class="sidebar">
       <div class="brand"><img class="brand-logo" :src="logoUrl" alt="电商平台采购订单导出 Logo" /><div><strong>电商平台<br>采购订单导出</strong><small>BY 五成</small></div></div>
       <div class="nav-label">购物平台 <span>{{ state?.platforms.length || 9 }}</span></div>
@@ -101,6 +103,7 @@ onUnmounted(()=>{off?.();offUpdate?.()})
               <details><summary>首次设置步骤与停止方式</summary><ol><li>开启辅助采集后，打开证书，在 Windows 中手动将其导入当前用户的受信任根证书。仅用于本机采集。</li><li>记下原来的代理设置，将手动代理临时设为 <code>127.0.0.1:17869</code>。当前程序尚不自动改动系统设置。</li><li>选择采集时间后点击“② 开始采集”，再打开对应微信小程序的订单列表并向下翻页。</li><li>结束后先恢复原来的系统代理设置，再停止辅助采集或退出软件。</li></ol><button class="text-button" @click="action(()=>desk.proxyStop(),'本机监听已停止，请确认系统代理已恢复。')">停止辅助采集</button></details>
             </section>
             <div v-if="detailHighlight" class="detail-prompt" role="status">{{selected==='jd'?'通过京东官方导出补充收件信息，自动按本任务日期范围匹配，可暂停后继续。':'列表已采集完成，请提取详情'}} <span>· {{detailPending}} 笔待提取</span></div>
+            <CollectionActivity v-if="task && activityVisible" :task="task" :pending-details="detailPending" />
             <details v-if="task?.plan" class="plan-inline">
               <summary><strong>采集进度 {{task.plan.segments.filter(s=>s.status==='completed').length}} / {{task.plan.segments.length}}</strong><span :title="task.message">{{task.message}}</span><span class="plan-expand">展开进度</span></summary>
               <div class="plan-segments" aria-label="采集计划进度"><div v-for="s in task.plan.segments" :key="s.id" :class="s.status"><strong>{{task.plan.granularity==='month'?s.from.slice(0,7):s.from}}</strong><small>{{s.from}} 至 {{s.to}}</small><span>{{segmentLabels[s.status]}} · {{s.count}} 笔</span></div></div>
@@ -109,7 +112,7 @@ onUnmounted(()=>{off?.();offUpdate?.()})
             <section class="results-card compact-results">
               <div v-if="!records.length" class="results-header"><h2>采集结果 <span class="count">{{records.length}}</span></h2><select v-if="tasks.length" :value="taskId" aria-label="查看历史采集任务" :disabled="busy||task?.status==='running'" @change="chooseTask"><option v-for="t in tasks" :key="t.id" :value="t.id">{{t.from}} 至 {{t.to}} · {{t.count}} 笔 · {{labels[t.status]}}</option></select></div>
               <div v-if="task && ['failed','needs_login'].includes(task.status)" class="task-strip" :class="task.status"><span class="dot"></span><strong>{{labels[task.status]}}</strong><span>{{task.message}}</span></div>
-              <div v-if="!records.length" class="empty-state"><div class="empty-icon"><svg viewBox="0 0 72 72" fill="none"><rect x="15" y="10" width="42" height="52" rx="8" stroke="currentColor" stroke-width="2"/><path d="M26 26h20M26 36h20M26 46h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div><h3>{{emptyResult?'该日期范围内没有订单':task?.status==='running'?'正在读取订单':'还没有采集订单'}}</h3><p>{{emptyResult?`${task?.from} 至 ${task?.to} 已查询完毕，请选择订单实际的下单日期后重新采集。`:task?.status==='running'?'正在按所选日期查询，请留意上方执行日志。':task?.status==='needs_login'?'请在平台页完成登录或验证，再继续采集。':task?.status==='failed'?task.message:'先点击“① 选择采集时间”，确认后点击“② 开始采集”。'}}</p><div class="empty-note">每个平台独立登录 · 原软件数据保持原样</div></div>
+              <div v-if="!records.length" class="empty-state"><div class="empty-icon"><svg viewBox="0 0 72 72" fill="none"><rect x="15" y="10" width="42" height="52" rx="8" stroke="currentColor" stroke-width="2"/><path d="M26 26h20M26 36h20M26 46h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div><h3>{{emptyResult?'该日期范围内没有订单':task?.status==='running'?'正在读取订单':'还没有采集订单'}}</h3><p>{{emptyResult?`${task?.from} 至 ${task?.to} 已查询完毕，请选择订单实际的下单日期后重新采集。`:task?.status==='running'?'正在按所选日期查询，请留意上方采集进度。':task?.status==='needs_login'?'请在平台页完成登录或验证，再继续采集。':task?.status==='failed'?task.message:'先点击“① 选择采集时间”，确认后点击“② 开始采集”。'}}</p><div class="empty-note">每个平台独立登录 · 原软件数据保持原样</div></div>
               <OrderTable v-else :orders="records" :platform="selected" :task-id="taskId" :busy="busy||task?.status==='running'" @open-order="openOrder"><template #toolbar><div class="results-heading"><select :value="taskId" :title="task?.message" aria-label="查看历史采集任务" :disabled="busy||task?.status==='running'" @change="chooseTask"><option v-for="t in tasks" :key="t.id" :value="t.id">{{t.from}} 至 {{t.to}} · {{t.count}} 笔 · {{labels[t.status]}}</option></select></div></template></OrderTable>
             </section>
             <ExecutionLog v-if="state?.showExecutionLog" ref="executionPanel" :platform="selected" :compact="task?.status!=='running'" />

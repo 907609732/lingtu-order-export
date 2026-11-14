@@ -27,7 +27,12 @@ export class Collector {
   constructor(private win:BrowserWindow,private store:Store,private changed:()=>void,private diagnostics:Diagnostics){win.on('resize',()=>this.layout())}
   private progress=new Map<string,ExecutionProgress>()
   private jdDownloads=new Map<string,AbortController>()
-  private stage(task:Task,context:Record<string,unknown>){this.progress.get(task.id)?.stage(context)}
+  private stage(task:Task,context:Record<string,unknown>){
+    const current=this.store.get(task.id),phase=context.phase
+    const activityPhase=phase==='detail'||phase==='official_export'?'details':phase==='page'||phase==='response'?'list':phase==='platform'?(current.operation||'list'):current.activityPhase
+    if(activityPhase&&current.activityPhase!==activityPhase){this.store.update(task.id,{activityPhase});this.changed()}
+    this.progress.get(task.id)?.stage(context)
+  }
   private async request(view:WebContentsView,api:string,data:unknown,platform:PlatformId){
     await this.assertPlanAccount(view,platform)
     const result=await view.webContents.executeJavaScript(`(${mtopRequest.toString()})(${JSON.stringify(api)},${JSON.stringify(data)},${JSON.stringify(platform)},${mtopFailure.toString()})`)

@@ -31,7 +31,7 @@ try{
  async function finished(id=task.id){for(let n=0;n<150;n++){const t=await page.evaluate(async id=>(await window.desk.state()).tasks.find(t=>t.id===id),id);if(t.status!=='running')return t;await new Promise(r=>setTimeout(r,100))}throw Error('PDD timed out')}
  let done=await finished();assert.equal(done.count,1);assert.equal(done.status,'partial');assert.equal(JSON.parse(done.cursor).offset,'cursor-29')
  await page.evaluate(id=>window.desk.resume(id),task.id);done=await finished()
- assert.equal(done.count,1);assert.equal(done.pages,2)
+ assert.equal(done.count,1);assert.equal(done.pages,2);assert.equal(done.activityPhase,'details');assert.notEqual(done.operation,'details')
  const orders=await page.evaluate(id=>window.desk.orders(id),task.id);assert.equal(orders[0].detailState,'complete');assert.equal(orders[0].receiver,'PRIVATE_RECEIVER');assert.equal(orders[0].items.length,1)
  const requests=await app.evaluate(()=>globalThis.pddCalls);assert.deepEqual(requests.map(r=>r.offset),['0','cursor-29','cursor-29']);assert.ok(requests.every(r=>r.page===1))
  await app.evaluate(async({session})=>session.fromPartition('persist:orderdesk-pdd').cookies.set({url:'https://mobile.yangkeduo.com',name:'pdd_user_id',value:'456'}))
