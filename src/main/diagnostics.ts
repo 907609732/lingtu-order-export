@@ -15,7 +15,7 @@ const events = new Set([
   'renderer.error','renderer.gone','renderer.preload_failed','platform.load_failed',
   'platform.debugger_failed','platform.response_failed','platform.gone',
   'collector.start','collector.waiting','collector.response','collector.parse_failed',
-  'collector.page','collector.detail_failed','collector.failed','collector.end','collector.stop',
+  'collector.official_export','collector.page','collector.detail_failed','collector.failed','collector.end','collector.stop',
   'export.done','export.image_failed','proxy.start','proxy.stop','proxy.error',
   'collector.stage','collector.wait','collector.detail','task.action','platform.open',
   'export.start','export.progress','export.wait'
@@ -28,10 +28,10 @@ const enums:Record<string,readonly string[]> = {
   operation:['state','orders','hidePage','setLogging','login','start','pause','resume','retry','finish','chooseDirectory','export','openOutput','openExport','clear','proxyStart','proxyStop','certificate','proxySettings','openLogs'],
   status:['running','paused','needs_login','partial','completed','failed'],
   format:['xlsx','csv'],origin:['window','promise','vue'],
-  phase:['platform','page','detail','rows','images','write','response'],action:['pause','resume','retry','finish'],
+  phase:['official_export','platform','page','detail','rows','images','write','response'],action:['pause','resume','retry','finish'],
   reason:['clean-exit','abnormal-exit','killed','crashed','oom','launch-failed','integrity-failure','memory-eviction']
 }
-const counters = new Set(['count','pages','page','received','missing','unknown','durationMs','exitCode','networkCode','current','total','seconds','year','month'])
+const counters = new Set(['matched','updated','count','pages','page','received','missing','unknown','durationMs','exitCode','networkCode','current','total','seconds','year','month'])
 const errorNames = new Set(['Error','TypeError','RangeError','SyntaxError','ReferenceError','URIError','EvalError','AggregateError','AbortError','TimeoutError'])
 const errorCodes = new Set(['ENOENT','EACCES','EPERM','ENOSPC','EIO','EBUSY','EEXIST','EADDRINUSE','ECONNRESET','ECONNREFUSED','ETIMEDOUT','ENOTFOUND','ERR_NETWORK','ERR_ABORTED','SQLITE_BUSY','SQLITE_ERROR'])
 const writeFailure = '日志写入失败，请检查磁盘空间和文件夹权限，再重新开启日志。'

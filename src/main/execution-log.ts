@@ -14,6 +14,7 @@ const failureText:Record<string,string>={
 const operations:Record<string,string>={start:'开始采集',login:'打开平台页',export:'导出文件',resume:'继续采集',retry:'重试采集',pause:'暂停采集',finish:'结束读取',openLogs:'打开日志目录',chooseDirectory:'选择保存目录',clear:'清理记录',proxyStart:'启动辅助采集'}
 const number=(value:unknown)=>typeof value==='number'&&Number.isFinite(value)?Math.max(0,Math.round(value)):0
 function stage(c:Record<string,unknown>):string {
+  if(c.phase==='official_export')return `下载京东官方导出：${number(c.year)} 年第 ${number(c.page)} 页`
   if(c.phase==='response')return '等待小程序订单数据'
   if(c.phase==='page')return `读取${c.year?`${number(c.year)} 年` : ''}${c.month?`${number(c.month)} 月` : ''}第 ${number(c.page)} 页订单`
   if(c.phase==='detail')return `补全订单详情 ${number(c.current)} / ${number(c.total)}`
@@ -41,6 +42,7 @@ export class ExecutionLog {
       case 'collector.wait':case 'export.wait':message=`仍在${stage(c)}，已等待 ${number(c.seconds)} 秒，请稍候…`;break
       case 'collector.page':message=`${c.year?`${number(c.year)} 年` : ''}${c.month?`${number(c.month)} 月` : ''}第 ${page} 页读取完成，本页识别 ${received} 笔，所选范围内累计 ${count} 笔。`;level='success';break
       case 'collector.response':if(received)message=`收到平台订单数据，识别 ${received} 笔，范围内累计 ${count} 笔。${number(c.unknown)?`另有 ${number(c.unknown)} 笔缺少日期，未计入。`:''}`;break
+      case 'collector.official_export':message=`${number(c.year)} 年第 ${page} 页官方导出已读取，已匹配 ${number(c.matched)} / ${number(c.total)} 笔，累计补充收件信息 ${number(c.updated)} 笔。`;level='success';break
       case 'collector.detail':message=`订单详情已处理 ${number(c.current)} / ${number(c.total)}。`;break
       case 'collector.detail_failed':message='本笔订单详情暂未获取，保留缺项标记并继续。';break
       case 'collector.waiting':message='正在等待小程序订单数据，请打开对应平台的买家订单列表并翻页。';break

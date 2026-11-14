@@ -35,6 +35,8 @@ export function mergeOrders(before: Order, after: Order): Order {
   }
   if (before.detailState === 'complete' || after.detailState === 'complete') merged.detailState = 'complete'
   merged.missing = [...new Set([...before.missing, ...after.missing])].filter(field => {
+    const recipientFields:Record<string,keyof Order>={'收货人':'receiver','收货人姓名':'receiver','联系电话':'phone','收货人电话':'phone','收货电话':'phone','收货地址':'address','物流公司':'logistics','物流单号':'tracking','快递单号':'tracking','运单号':'tracking'}
+    if(recipientFields[field])return !merged[recipientFields[field]]
     if (field === '订单日期') return !merged.createdAt
     if (field === '实付款') return merged.paidFen === null
     if (field === '商品信息') return !merged.items.some(item => item.title)

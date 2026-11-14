@@ -13,7 +13,7 @@ import { Diagnostics } from './diagnostics'
 import { ExecutionLog } from './execution-log'
 import { ExecutionProgress } from './execution-progress'
 import type { ExportInput,PlatformId,StartInput } from '../shared/types'
-import { WEBSITE_URL,REPOSITORY_URL } from '../shared/config'
+import { WEBSITE_URL,REPOSITORY_URL,CONTACT_URL } from '../shared/config'
 import { UpdateController } from './updater'
 import electronUpdater from 'electron-updater'
 import { reportLaunch } from './analytics'
@@ -108,6 +108,7 @@ app.whenReady().then(async()=>{
   bind('cancelUpdate',()=>updater.cancel())
   bind('installUpdate',()=>updater.install())
   bind('openWebsite',()=>{if(WEBSITE_URL)shell.openExternal(WEBSITE_URL)})
+  bind('openContact',()=>shell.openExternal(CONTACT_URL))
   bind('openRepository',()=>shell.openExternal(REPOSITORY_URL))
   // 启动检查和统计独立，任一网络请求失败均不阻塞另一项。
   if(!process.env.ORDERDESK_TEST_DATA){

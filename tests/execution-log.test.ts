@@ -18,6 +18,14 @@ describe('live execution feedback',()=>{
     expect(rows.map(r=>r.message)).toEqual(['开始采集订单，当前已保存 0 笔。','正在读取第 2 页订单…','第 2 页读取完成，本页识别 20 笔，所选范围内累计 32 笔。'])
     expect(rows[2].level).toBe('success');expect(readdirSync(root)).toEqual([])
   })
+  it('reports official export progress without exposing workbook fields',()=>{
+    const {diagnostics,journal}=setup()
+    diagnostics.event('collector.stage',{platform:'jd',phase:'official_export',year:2026,page:2})
+    diagnostics.event('collector.official_export',{platform:'jd',year:2026,page:2,matched:38,total:58,updated:20,address:'PRIVATE_ADDRESS'})
+    const rows=journal.snapshot('jd')
+    expect(rows.map(r=>r.message)).toEqual(['正在下载京东官方导出：2026 年第 2 页…','2026 年第 2 页官方导出已读取，已匹配 38 / 58 笔，累计补充收件信息 20 笔。'])
+    expect(rows[1].level).toBe('success');expect(JSON.stringify(rows)).not.toContain('PRIVATE_ADDRESS')
+  })
   it('keeps platform feeds separate and bounded to the latest 300 entries',()=>{
     const {diagnostics,journal}=setup();diagnostics.event('app.start')
     for(let page=1;page<=400;page++)diagnostics.event('collector.page',{platform:'taobao',page})

@@ -21,6 +21,7 @@ export interface PlanSegment extends DateSegment { id:string; status:PlanSegment
 export interface PlanBucket extends DateSegment { id:string; segmentIds:string[]; status:PlanSegmentStatus; cursor:string }
 export interface ExtractionPlan { granularity:'month'|'day'; segments:PlanSegment[]; buckets:PlanBucket[]; currentBucket?:string }
 export interface Task {
+  jdDetailExport?:{year:number;nextPage:number;updated?:number}
   detailExport?: {requestedAt:string;previous:string[];token?:string}
   id: string; platform: PlatformId; account: string; from: string; to: string; status: TaskStatus; createdAt: string; updatedAt: string
   count: number; pages: number; message: string; cursor: string; exportedPath: string; accountKey?: string; accountCookie?:string; operation?:'list'|'details'; listOutcome?:ListOutcome; plan?:ExtractionPlan
@@ -42,7 +43,7 @@ export interface DeskAPI {
   reportError(origin: 'window' | 'promise' | 'vue', error: { name: string; message: string; stack: string }): Promise<void>
   executionLogs(platform: PlatformId): Promise<ExecutionEntry[]>; setExecutionLogVisible(visible: boolean): Promise<void>
   onExecutionLog(callback: () => void): () => void
-  checkUpdate(): Promise<void>; downloadUpdate():Promise<void>; cancelUpdate():Promise<void>; installUpdate():Promise<void>; openWebsite(): Promise<void>; openRepository(): Promise<void>
+  checkUpdate(): Promise<void>; downloadUpdate():Promise<void>; cancelUpdate():Promise<void>; installUpdate():Promise<void>; openWebsite(): Promise<void>; openContact():Promise<void>; openRepository(): Promise<void>
   onUpdate(callback: () => void): () => void
 }
 export interface UpdateState {

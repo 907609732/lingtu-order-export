@@ -19,10 +19,14 @@ import {taobaoDetailUrl,readTaobaoDetailPage,mergeTaobaoVisibleDetail} from './t
 import {platformDetailUrl,mergePlatformVisibleDetail} from './platform-detail'
 import {readAlibabaExport,alibabaExportUrl} from './alibaba-detail'
 import {isAlibabaLoginLanding} from './platform-login'
+import {JdExportError,clickJdExportAction} from './jd-export'
+import {downloadJdExport} from './jd-export-download'
+import {collectJdExportPages,validateJdExportPage,type JdExportPage} from './jd-export-pages'
 export class Collector {
   views=new Map<PlatformId,WebContentsView>(); current?:WebContentsView; active?:string; stopped=new Set<string>(); runs=new Set<string>(); private captureCount=0; private disposing=false
   constructor(private win:BrowserWindow,private store:Store,private changed:()=>void,private diagnostics:Diagnostics){win.on('resize',()=>this.layout())}
   private progress=new Map<string,ExecutionProgress>()
+  private jdDownloads=new Map<string,AbortController>()
   private stage(task:Task,context:Record<string,unknown>){this.progress.get(task.id)?.stage(context)}
   private async request(view:WebContentsView,api:string,data:unknown,platform:PlatformId){
     await this.assertPlanAccount(view,platform)
@@ -69,8 +73,8 @@ export class Collector {
       else if(task.platform==='xianyu')await this.xianyuDetails(task,view)
       else if(task.platform==='alibaba')await this.alibabaDetails(task,view)
       else await this.jdDetails(task,view)
-      if(!this.stopped.has(task.id)){const remaining=pendingDetails(this.store.orders(task.id)).length;this.store.update(task.id,{status:'partial',message:`${name}详情读取结束，${remaining?`还有 ${remaining} 笔未成功读取，可再次提取`:'已处理所有订单'}；未提供字段仍保留缺项`});this.changed()}
-    }catch(error){interrupted=true;this.diagnostics.event('collector.failed',{platform:task.platform,taskId:task.id},error);if(!this.stopped.has(task.id))this.store.update(task.id,{status:error instanceof CollectionError&&error.category==='login_or_verification'?'needs_login':'partial',message:error instanceof CollectionError?error.message:'详情读取暂时中断，已保留结果，可继续提取'})}
+      if(!this.stopped.has(task.id)&&!(task.platform==='jd'&&this.store.get(task.id).jdDetailExport)){const remaining=pendingDetails(this.store.orders(task.id)).length;this.store.update(task.id,{status:'partial',message:`${name}详情读取结束，${remaining?`还有 ${remaining} 笔未成功读取，可再次提取`:'已处理所有订单'}；未提供字段仍保留缺项`});this.changed()}
+    }catch(error){interrupted=true;this.diagnostics.event('collector.failed',{platform:task.platform,taskId:task.id},error);if(!this.stopped.has(task.id))this.store.update(task.id,{status:error instanceof CollectionError&&error.category==='login_or_verification'?'needs_login':'partial',message:error instanceof CollectionError||error instanceof JdExportError?error.message:'详情读取暂时中断，已保留结果，可继续提取'})}
     finally{this.runs.delete(task.id);if(this.active===task.id)this.active=undefined;this.progress.get(task.id)?.close();this.progress.delete(task.id);const latest=this.store.get(task.id);this.diagnostics.event('collector.end',{platform:task.platform,taskId:task.id,status:latest.status,count:latest.count,interrupted,durationMs:Date.now()-started});this.changed()}
   }
   async enrichTaobao(task:Task):Promise<void>{
@@ -157,7 +161,7 @@ export class Collector {
       this.store.update(task.id,{pages:task.pages+1,message:unknown?`${unknown} 笔订单缺少日期，未混入所选日期范围`:`已读取订单，当前范围内 ${this.store.get(task.id).count} 笔`});if(count||unknown)this.changed()
     }catch(error){this.diagnostics.event('collector.parse_failed',{platform,taskId:task.id},error,'warn')}
   }
-  stop(id:string){this.diagnostics.event('collector.stop',{taskId:id});this.progress.get(id)?.close();this.progress.delete(id);this.stopped.add(id);if(this.active===id)this.active=undefined}
+  stop(id:string){this.jdDownloads.get(id)?.abort();this.diagnostics.event('collector.stop',{taskId:id});this.progress.get(id)?.close();this.progress.delete(id);this.stopped.add(id);if(this.active===id)this.active=undefined}
   async run(task:Task):Promise<void>{
     if(task.operation==='details')return this.enrichDetails(task)
     if(this.runs.size)throw new Error('上一个采集任务正在结束，请稍后再试')
@@ -365,7 +369,64 @@ export class Collector {
       this.diagnostics.event('collector.detail',{platform:task.platform,taskId:task.id,current:i+1,total:all.length})
     }
   }
-  private async jdDetails(task:Task,view:WebContentsView){await this.visibleDetails(task,view)}
+  private async assertJdExportAccount(task:Task,view:WebContentsView){
+    const current=this.store.get(task.id),cookies=await view.webContents.session.cookies.get({url:platformById('jd').url})
+    const identity=current.accountCookie?cookies.find(cookie=>cookie.name===current.accountCookie):['pin','pt_pin'].map(name=>cookies.find(cookie=>cookie.name===name&&cookie.value)).find(Boolean)
+    if(!identity?.value)throw new CollectionError(current.accountKey?'account_changed':'login_or_verification')
+    const key=createHash('sha256').update('orderdesk:jd:'+identity.name+':'+identity.value).digest('hex')
+    if(current.accountKey&&current.accountKey!==key)throw new CollectionError('account_changed')
+    if(!current.accountKey)this.store.update(task.id,{accountKey:key,accountCookie:identity.name})
+  }
+  private async jdDetails(task:Task,view:WebContentsView){
+    const pending=pendingDetails(this.store.orders(task.id))
+    // Preserve the proven direct-detail path when the platform still supplies
+    // usable links; modern App-only lists use official per-page XLSX instead.
+    if(pending.length&&pending.every(order=>{try{platformDetailUrl('jd',order.detailUrl,order.id);return true}catch{return false}})){await this.visibleDetails(task,view);return}
+    const currentYear=Number(dateText(Date.now()).slice(0,4)),checkAccount=()=>this.assertJdExportAccount(task,view)
+    await checkAccount()
+    const result=await collectJdExportPages({from:task.from,to:task.to,currentYear,checkpoint:this.store.get(task.id).jdDetailExport,existing:()=>this.store.orders(task.id),stopped:()=>this.stopped.has(task.id),checkAccount,
+      stage:(year,page)=>{this.stage(task,{phase:'official_export',year,page});this.store.update(task.id,{message:`正在下载京东官方导出 ${year} 年第 ${page} 页，完成后按任务日期匹配`});this.changed()},
+      load:async(year,page)=>{
+        const url=new URL(platformById('jd').url);url.searchParams.set('d',year===currentYear?'2':String(year));url.searchParams.set('s','4096');url.searchParams.set('page',String(page))
+        await this.navigateDetail(view,url.href)
+        let snap:JdExportPage|undefined
+        for(let attempt=0;attempt<24&&!this.stopped.has(task.id);attempt++){
+          try{snap=await view.webContents.executeJavaScript(`(${readOrderPage.toString()})('jd')`)}catch{throw new JdExportError('无法读取京东订单列表，请打开平台页面后继续官方导出')}
+          try{validateJdExportPage(snap!,year,page,currentYear);return snap!}catch(error){if(error instanceof CollectionError)throw error;if(attempt===23)throw error}
+          await delay(500)
+        }
+        return snap!
+      },
+      download:async snapshot=>{
+        const abort=new AbortController();this.jdDownloads.set(task.id,abort)
+        try{
+          const buffer=await downloadJdExport(view.webContents,async()=>{
+            await checkAccount();if(this.stopped.has(task.id)){abort.abort();return}
+            const opened=await view.webContents.executeJavaScript(`(${clickJdExportAction.toString()})('open')`)
+            if(opened.blocked)throw new CollectionError('login_or_verification')
+            if(!opened.clicked)throw new JdExportError('京东页面未找到“导出订单”入口，请确认当前为订单列表后继续')
+            for(let attempt=0;attempt<24&&!this.stopped.has(task.id);attempt++){
+              const clicked=await view.webContents.executeJavaScript(`(${clickJdExportAction.toString()})('download')`)
+              if(clicked.blocked)throw new CollectionError('login_or_verification')
+              if(clicked.clicked)return
+              await delay(250)
+            }
+            if(this.stopped.has(task.id)){abort.abort();return}
+            throw new JdExportError('京东官方导出弹窗未出现“下载订单”，请检查页面后继续')
+          },{signal:abort.signal})
+          if(this.stopped.has(task.id))return buffer
+          await checkAccount()
+          const current:JdExportPage=await view.webContents.executeJavaScript(`(${readOrderPage.toString()})('jd')`)
+          const year=snapshot.selectedRange==='今年内订单'?currentYear:Number(snapshot.selectedRange.slice(0,4));validateJdExportPage(current,year,snapshot.page,currentYear)
+          if(current.signature!==snapshot.signature)throw new JdExportError('京东下载期间当前页订单发生变化，本页未写入，请继续重试')
+          return buffer
+        }finally{if(this.jdDownloads.get(task.id)===abort)this.jdDownloads.delete(task.id)}
+      },
+      commit:(orders,checkpoint)=>{this.store.add(task.id,orders);this.store.update(task.id,{jdDetailExport:checkpoint});this.changed()},
+      progress:event=>this.diagnostics.event('collector.official_export',{platform:'jd',taskId:task.id,...event})
+    })
+    if(!this.stopped.has(task.id)){this.store.update(task.id,{status:'partial',message:`京东官方导出已匹配 ${result.matched} 笔任务订单，${result.updated} 笔新增收件或物流字段；官方文件未提供的字段仍保留缺项`});this.changed()}
+  }
   private async alibabaDetails(task:Task,view:WebContentsView){
     const api='mtop.1688.trading.dataline.service',hash=(value:string)=>createHash('sha256').update(value).digest('hex')
     const records=async()=>{const response=await this.request(view,api,{serviceId:'OrderExportDataLineService.exportRecords',param:'buyerOrder'},'alibaba');if(!Array.isArray(response?.data?.data))throw new CollectionError('response_structure');return response.data.data as {path?:string;gmtCreate?:string;exportStatus?:string}[]}
