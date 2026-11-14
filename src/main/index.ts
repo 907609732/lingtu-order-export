@@ -12,7 +12,7 @@ import { OrderProxy } from './proxy'
 import { Diagnostics } from './diagnostics'
 import { ExecutionLog } from './execution-log'
 import { ExecutionProgress } from './execution-progress'
-import type { ExportInput,PlatformId,StartInput } from '../shared/types'
+import type { ExportInput,PlatformId,StartInput,Task } from '../shared/types'
 import { WEBSITE_URL,REPOSITORY_URL,CONTACT_URL } from '../shared/config'
 import { UpdateController } from './updater'
 import electronUpdater from 'electron-updater'
@@ -41,6 +41,7 @@ function bind(name:string,fn:(...args:any[])=>any){ipcMain.handle('desk:'+name,a
 function target(id:unknown):PlatformId{return platformById(String(id)).id}
 function idle(platform:PlatformId){updater.assertCanStart();target(platform);collector.assertIdle(platform);if(platformById(platform).mode==='proxy'&&proxyStarting)throw new Error('辅助采集正在初始化，请稍后再开始采集');if(platformById(platform).mode==='proxy'&&proxy.running&&proxy.platform!==platform)throw new Error('请先停止当前辅助平台，再切换辅助采集');if(store.tasks().some(t=>t.platform===platform&&t.status==='running'))throw new Error('请先暂停当前平台的采集任务')}
 function clearable(platform:PlatformId){idle(platform);if(exporting&&exportingPlatform===platform)throw new Error('当前平台正在导出文件，请等待导出结束再清理')}
+function idleTask(id:string):Task{updater.assertCanStart();const task=store.get(id);idle(task.platform);return task}
 async function imageBytes(url:string):Promise<Buffer>{
   const u=new URL(url.startsWith('//')?'https:'+url:url);if(!['https:','http:'].includes(u.protocol)||!['alicdn.com','taobaocdn.com','360buyimg.com','jd.com','pddpic.com','yangkeduo.com','dewu.com','poizon.com','ecukwai.com','kwai.net','ksapisrv.com','meituan.net','dianping.com','ele.me','elemecdn.com'].some(d=>u.hostname===d||u.hostname.endsWith('.'+d)))throw new Error('图片地址不属于平台图片域名')
   const folder=join(app.getPath('userData'),'images');await mkdir(folder,{recursive:true});const file=join(folder,createHash('sha256').update(u.href).digest('hex')+'.png');try{return await readFile(file)}catch{}
@@ -82,12 +83,12 @@ app.whenReady().then(async()=>{
   bind('login',async(id:PlatformId,mode:unknown='ordinary')=>{target(id);if(mode!=='ordinary'&&mode!=='official-export')throw new Error('采集模式无效');diagnostics.event('platform.open',{platform:id});await collector.show(id,mode)})
   bind('hidePage',()=>collector.hide())
   bind('start',(input:StartInput)=>{idle(input.platform);if(input.mode==='official-export')throw new Error('官方页面导出流程尚待验证，暂未开放自动导出');const task=store.create(input);run(task.id);change();return task})
-  bind('enrichDetails',(id:string)=>{const task=store.get(id);idle(task.platform);if(!detailPlatforms.includes(task.platform)||!task.count)throw new Error('请先采集当前平台订单列表');void collector.enrichDetails(task).catch(error=>{diagnostics.event('collector.failed',{taskId:id,platform:task.platform},error);store.update(id,{status:'partial',message:'详情读取暂时中断，已有订单已保留'});change()})})
-  bind('openOrder',async(id:string,orderId:string)=>{idle(store.get(id).platform);const order=store.orders(id).find(o=>o.id===orderId);if(!order)throw new Error('订单不存在');await collector.openOrder(order)})
+  bind('enrichDetails',(id:string)=>{const task=idleTask(id);if(!detailPlatforms.includes(task.platform)||!task.count)throw new Error('请先采集当前平台订单列表');void collector.enrichDetails(task).catch(error=>{diagnostics.event('collector.failed',{taskId:id,platform:task.platform},error);store.update(id,{status:'partial',message:'详情读取暂时中断，已有订单已保留'});change()})})
+  bind('openOrder',async(id:string,orderId:string)=>{idleTask(id);const order=store.orders(id).find(o=>o.id===orderId);if(!order)throw new Error('订单不存在');await collector.openOrder(order)})
   const taskAction=(id:string,action:string)=>diagnostics.event('task.action',{taskId:id,platform:store.get(id).platform,action})
   bind('pause',(id:string)=>{collector.stop(id);store.update(id,{status:'paused',message:'已暂停，当前结果已保存在本机'});taskAction(id,'pause');change()})
-  bind('resume',(id:string)=>{idle(store.get(id).platform);if(store.get(id).mode==='official-export')throw new Error('官方页面导出流程尚待验证，暂未开放自动导出');store.update(id,{status:'running',message:'正在继续采集'});taskAction(id,'resume');run(id);change()})
-  bind('retry',(id:string)=>{idle(store.get(id).platform);if(store.get(id).mode==='official-export')throw new Error('官方页面导出流程尚待验证，暂未开放自动导出');store.update(id,{status:'running',operation:'list',listOutcome:'pending',message:'正在重新检查未完成的订单范围',...(store.get(id).plan?{}:{cursor:''})});taskAction(id,'retry');run(id);change()})
+  bind('resume',(id:string)=>{const task=idleTask(id);if(task.mode==='official-export')throw new Error('官方页面导出流程尚待验证，暂未开放自动导出');store.update(id,{status:'running',message:'正在继续采集'});taskAction(id,'resume');run(id);change()})
+  bind('retry',(id:string)=>{const task=idleTask(id);if(task.mode==='official-export')throw new Error('官方页面导出流程尚待验证，暂未开放自动导出');store.update(id,{status:'running',operation:'list',listOutcome:'pending',message:'正在重新检查未完成的订单范围',...(task.plan?{}:{cursor:''})});taskAction(id,'retry');run(id);change()})
   bind('finish',(id:string)=>{collector.stop(id);store.update(id,{status:'partial',message:'已结束本次读取；仅代表已获取的记录，平台完整范围未自动验证'});taskAction(id,'finish');change()})
   bind('chooseDirectory',async()=>{collector.hide();const result=await dialog.showOpenDialog(win,{title:'选择订单导出目录',properties:['openDirectory','createDirectory'],defaultPath:store.setting('outputDir')||app.getPath('documents')});if(result.canceled)return store.setting('outputDir');store.setting('outputDir',result.filePaths[0]);change();return result.filePaths[0]})
   bind('export',async(input:ExportInput)=>{

@@ -14,6 +14,7 @@
 - Isolated UI fixture passed platform switching, background verification, drain guards, stale responses and export snapshots.
 - Existing plan UI, primary resume, five-platform details, collection activity and official-mode preparation smoke tests passed.
 - Normal local source app loaded only after verifying no running task, with a local database backup. Real business collections were not started by the agent.
+- Cloud regression found update-install admission had moved behind task lookup. Restored maintenance-gate priority through idleTask; local update UI/IPC smoke and platform concurrency smoke both passed afterward.
 
 ## Constraints
 - Same platform single task including stopping/drain; preserve per-platform request pacing and existing data.
