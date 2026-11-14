@@ -90,19 +90,18 @@ onUnmounted(()=>{off?.();offUpdate?.()})
         <template v-else-if="section==='settings'">
           <div class="page-title"><div><div class="eyebrow">PREFERENCES</div><h1>保存与设置</h1><p>简单设置，方便下次继续使用。</p></div></div>
           <section class="settings-card">
-            <div class="logging-row"><div><h2 id="execution-log-label">显示执行日志</h2><p>{{state?.showExecutionLog?'已显示 · 在采集界面实时查看执行过程':'已隐藏 · 采集界面不显示日志面板'}}，重启后保留选择。</p></div><button role="switch" aria-labelledby="execution-log-label" :aria-checked="!!state?.showExecutionLog" :disabled="busy||!state" class="log-switch" :class="{on:state?.showExecutionLog}" @click="toggleExecutionLog"><span></span></button></div>
-            <p>显示正在执行的步骤、读取页数、订单数量及成功或失败提示。支持自动滚动和复制日志。</p>
-            <p>关闭只隐藏面板；重新打开可查看本次运行的最近记录。需要将日志保存到文件时，开启下方的问题排查日志。</p>
+            <h2>日志设置</h2>
+            <div class="log-settings-group">
+              <div class="logging-row"><div><h3 id="execution-log-label">显示执行日志</h3><p>{{state?.showExecutionLog?'已显示 · 在采集界面实时查看执行过程':'已隐藏 · 采集界面不显示日志面板'}}，重启后保留选择。</p></div><button role="switch" aria-labelledby="execution-log-label" :aria-checked="!!state?.showExecutionLog" :disabled="busy||!state" class="log-switch" :class="{on:state?.showExecutionLog}" @click="toggleExecutionLog"><span></span></button></div>
+              <p>显示执行步骤、读取页数、订单数量及结果，支持自动滚动和复制。关闭只隐藏面板，重新打开可查看本次运行的最近记录。</p>
+            </div>
+            <div class="log-settings-group">
+              <div class="logging-row"><div><h3 id="logging-label">问题排查日志</h3><p id="logging-description">{{state?.logging.enabled?'已开启 · 正在记录运行过程':'已关闭 · 需要排查问题时开启'}}，重启后保留选择。</p></div><button role="switch" aria-labelledby="logging-label" aria-describedby="logging-description" :aria-checked="!!state?.logging.enabled" :disabled="busy||!state" class="log-switch" :class="{on:state?.logging.enabled}" @click="toggleLogging"><span></span></button></div>
+              <p>将采集进度、导出结果和异常保存在本机，不记录账号、Cookie、收货信息及订单正文。每个日志约 5 MB，保留当前和上一份；关闭后停止新增，已有日志保留。</p>
+              <p v-if="state?.logging.error" class="log-error" role="alert">{{state.logging.error}}</p>
+              <div class="logging-folder"><button class="secondary" :disabled="busy" @click="action(()=>desk.openLogs())">打开日志文件夹</button><span class="path" :title="state?.logging.directory">{{state?.logging.directory}}</span></div>
+            </div>
           </section>
-          <section class="settings-card">
-            <div class="logging-row"><div><h2 id="logging-label">问题排查日志</h2><p id="logging-description">{{state?.logging.enabled?'已开启 · 正在记录运行过程':'已关闭 · 需要排查问题时开启'}}，重启后保留选择。</p></div><button role="switch" aria-labelledby="logging-label" aria-describedby="logging-description" :aria-checked="!!state?.logging.enabled" :disabled="busy||!state" class="log-switch" :class="{on:state?.logging.enabled}" @click="toggleLogging"><span></span></button></div>
-            <p>记录采集进度、导出结果和异常。日志仅存本机，不记录账号、Cookie、收货信息及订单正文。</p>
-            <p>每个日志约 5 MB，自动保留当前和上一份。关闭后停止新增，已有日志保留。</p>
-            <p v-if="state?.logging.error" class="log-error" role="alert">{{state.logging.error}}</p>
-            <div class="logging-folder"><button class="secondary" :disabled="busy" @click="action(()=>desk.openLogs())">打开日志文件夹</button><span class="path" :title="state?.logging.directory">{{state?.logging.directory}}</span></div>
-          </section>
-          <section class="settings-card"><h2>导出文件夹</h2><p class="path">{{state?.outputDir||'还未选择，首次导出前设置即可'}}</p><div class="button-row"><button class="primary" @click="choose">选择文件夹</button><button class="secondary" :disabled="!state?.outputDir" @click="action(()=>desk.openOutput())">打开文件夹</button></div></section>
-          <section class="settings-card"><h2>当前验证状态</h2><p>开发验证版。程序安装、样例解析和文件生成，与真实平台采集验收分别记录。请先使用短日期范围核对订单。</p></section>
           <section class="settings-card about-card"><h2>关于</h2><p class="about-brand">电商平台采购订单导出 <span class="by">BY 五成</span></p><div class="button-row"><button class="secondary" :disabled="busy" @click="openWebsite">访问官网 ↗</button><button class="secondary" :disabled="busy" @click="openRepository">GitHub 仓库 ↗</button></div></section>
           <UpdatePanel v-if="state?.update" :update="state.update" :business-busy="busy||!!state.proxy.running||state.tasks.some(t=>t.status==='running')" @refresh="refresh" />
           <SupportAuthor />

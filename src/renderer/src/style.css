@@ -139,6 +139,9 @@ h2{font-size:13px;font-weight:600}
 .browser-placeholder{color:var(--secondary);font-size:11px}
 .path{word-break:break-all}
 .logging-row{display:flex;align-items:center;justify-content:space-between;gap:24px}
+.log-settings-group{margin-top:18px}
+.log-settings-group+.log-settings-group{padding-top:18px;border-top:1px solid var(--line)}
+.log-settings-group h3{font-size:13px;font-weight:600;margin:0}
 .logging-row p{margin-bottom:0}
 .log-switch{flex:0 0 42px;width:42px;height:25px;padding:3px;border-radius:20px;background:#d2d3da}
 .log-switch.on{background:var(--accent)}
