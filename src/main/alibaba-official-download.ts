@@ -10,8 +10,9 @@ export async function downloadAlibabaOfficialReport(contents:WebContents,record:
  if(url.protocol!=='https:'||url.username||url.password||url.port||!/(^|\.)1688\.com$/.test(url.hostname)||!record.token||!record.filename.endsWith('.xlsx'))throw Error('官方报表下载来源尚未验证')
  if(active.has(contents))throw Error('当前官方报表正在下载')
  if(options.signal?.aborted)throw Error('官方报表下载已暂停')
- await options.assertAccount();active.add(contents);let folder:string|undefined,keep=false
+ active.add(contents);let folder:string|undefined,keep=false
  try{
+  await options.assertAccount()
   await mkdir(options.directory,{recursive:true});folder=await mkdtemp(join(options.directory,'alibaba-official-'));const path=join(folder,'report.xlsx')
   const bytes=await new Promise<Buffer>((resolve,reject)=>{
    let item:DownloadItem|undefined,settled=false
@@ -20,8 +21,10 @@ export async function downloadAlibabaOfficialReport(contents:WebContents,record:
    const updated=()=>{if(item&&(item.getReceivedBytes()>maxBytes||item.getTotalBytes()>maxBytes))finish(Error('官方报表超过32MB，请缩小范围'))}
    const done=(_event:Event,state:string)=>{if(state!=='completed'){finish(Error('官方报表下载中断，未入库'));return}void(async()=>{try{await options.assertAccount();const size=(await stat(path)).size;if(!size||size>maxBytes)throw Error('官方报表文件体积无效');finish(undefined,await readFile(path))}catch(error){finish(error instanceof Error?error:Error('官方报表读取失败'))}})()}
    const willDownload=(_event:Event,candidate:DownloadItem,source:WebContents)=>{
-    if(settled||item||source!==contents||candidate.getURL()!==record.url||candidate.getFilename()!==record.filename)return
-    if(candidate.getURLChain().some(value=>value!==record.url))return
+    if(source!==contents)return
+    if(settled||item||candidate.getURL()!==record.url||candidate.getFilename()!==record.filename||candidate.getURLChain().some(value=>value!==record.url)){
+     _event.preventDefault();candidate.cancel();finish(Error('官方报表下载与当前记录不匹配，已取消'));return
+    }
     item=candidate
     try{candidate.setSavePath(path);candidate.on('updated',updated);candidate.once('done',done);updated();void options.assertAccount().catch(error=>finish(error))}catch{finish(Error('官方报表保存失败'))}
    }
