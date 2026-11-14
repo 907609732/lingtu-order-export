@@ -65,7 +65,7 @@ app.whenReady().then(async()=>{
   const {autoUpdater}=electronUpdater
   autoUpdater.setFeedURL({provider:'github',owner:'907609732',repo:'lingtu-order-export'})
   updater=new UpdateController(autoUpdater,{current:app.getVersion(),supported:app.isPackaged&&process.platform==='win32',busy:()=>!!(collector.runs.size||exporting||proxyStarting||proxy.running||store.tasks().some(t=>t.status==='running')),changed:()=>{if(win&&!win.isDestroyed())win.webContents.send('desk:updateAvailable')}})
-  bind('state',()=>({platforms,tasks:store.tasks(),outputDir:store.setting('outputDir'),version:app.getVersion(),logging:diagnostics.state(),showExecutionLog:store.setting('showExecutionLog')!=='false',proxy:{running:proxy.running,port:proxy.port,certificate:proxy.certificate},update:updater.state}))
+  bind('state',()=>({alibabaOfficialExportAvailable:false,platforms,tasks:store.tasks(),outputDir:store.setting('outputDir'),version:app.getVersion(),logging:diagnostics.state(),showExecutionLog:store.setting('showExecutionLog')!=='false',proxy:{running:proxy.running,port:proxy.port,certificate:proxy.certificate},update:updater.state}))
   bind('executionLogs',(platform:PlatformId)=>journal.snapshot(target(platform)))
   bind('setExecutionLogVisible',(visible:unknown)=>{if(typeof visible!=='boolean')throw new Error('执行日志开关参数无效');store.setting('showExecutionLog',String(visible));change()})
   bind('setLogging',(enabled:unknown)=>{
@@ -78,9 +78,9 @@ app.whenReady().then(async()=>{
   bind('openLogs',async()=>{await mkdir(diagnostics.directory,{recursive:true});if(await shell.openPath(diagnostics.state().directory))throw new Error('无法打开日志文件夹，请在资源管理器中打开设置页显示的路径')})
   bind('reportError',(origin:unknown,error:unknown)=>{if(['window','promise','vue'].includes(String(origin)))diagnostics.event('renderer.error',{origin},error)})
   bind('orders',(id:string)=>store.orders(id))
-  bind('login',async(id:PlatformId)=>{target(id);diagnostics.event('platform.open',{platform:id});await collector.show(id)})
+  bind('login',async(id:PlatformId,mode:unknown='ordinary')=>{target(id);if(mode!=='ordinary'&&mode!=='official-export')throw new Error('采集模式无效');diagnostics.event('platform.open',{platform:id});await collector.show(id,mode)})
   bind('hidePage',()=>collector.hide())
-  bind('start',(input:StartInput)=>{idle();target(input.platform);const task=store.create(input);run(task.id);change();return task})
+  bind('start',(input:StartInput)=>{idle();target(input.platform);if(input.mode==='official-export')throw new Error('官方页面导出流程尚待验证，暂未开放自动导出');const task=store.create(input);run(task.id);change();return task})
   bind('enrichDetails',(id:string)=>{idle();const task=store.get(id);if(!detailPlatforms.includes(task.platform)||!task.count)throw new Error('请先采集当前平台订单列表');void collector.enrichDetails(task).catch(error=>{diagnostics.event('collector.failed',{taskId:id,platform:task.platform},error);store.update(id,{status:'partial',message:'详情读取暂时中断，已有订单已保留'});change()})})
   bind('openOrder',async(id:string,orderId:string)=>{idle();const order=store.orders(id).find(o=>o.id===orderId);if(!order)throw new Error('订单不存在');await collector.openOrder(order)})
   const taskAction=(id:string,action:string)=>diagnostics.event('task.action',{taskId:id,platform:store.get(id).platform,action})
