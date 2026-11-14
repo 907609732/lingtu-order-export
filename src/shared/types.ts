@@ -1,3 +1,6 @@
+export type CollectionMode = 'ordinary' | 'official-export'
+export interface AlibabaOfficialAudit { rows:number; uniqueOrders:number; importedOrders:number; outOfRange:number; accountMismatch:number; duplicates:number; missing:number; conflicts:{orderId:string;field:string;values:string[]}[]; warnings:string[]; scopeVerified:boolean }
+export interface AlibabaOfficialCheckpoint { phase:'search'|'submit'|'waiting'|'download'|'import'|'complete'; segmentIndex:number; expectedTotal?:number; submission?:'prepared'|'unknown'|'accepted'; token?:string; filePath?:string; fileSha256?:string; accountKey?:string; audit?:AlibabaOfficialAudit }
 export type PlatformId = 'taobao' | 'alibaba' | 'pdd' | 'jd' | 'xianyu' | 'dewu' | 'kuaishou' | 'eleme' | 'meituan'
 export type TaskStatus = 'running' | 'paused' | 'needs_login' | 'partial' | 'completed' | 'failed'
 export interface Platform {
@@ -21,19 +24,20 @@ export interface PlanSegment extends DateSegment { id:string; status:PlanSegment
 export interface PlanBucket extends DateSegment { id:string; segmentIds:string[]; status:PlanSegmentStatus; cursor:string }
 export interface ExtractionPlan { granularity:'month'|'day'; segments:PlanSegment[]; buckets:PlanBucket[]; currentBucket?:string }
 export interface Task {
+  mode?:CollectionMode; officialExport?:AlibabaOfficialCheckpoint
   jdDetailExport?:{year:number;nextPage:number;updated?:number}
   detailExport?: {requestedAt:string;previous:string[];token?:string}
   id: string; platform: PlatformId; account: string; from: string; to: string; status: TaskStatus; createdAt: string; updatedAt: string
   count: number; pages: number; message: string; cursor: string; exportedPath: string; accountKey?: string; accountCookie?:string; operation?:'list'|'details'; activityPhase?:'list'|'details'; listOutcome?:ListOutcome; plan?:ExtractionPlan
 }
-export interface StartInput { platform: PlatformId; from: string; to: string; plan?:PlanInput }
+export interface StartInput { mode?:CollectionMode; platform: PlatformId; from: string; to: string; plan?:PlanInput }
 export interface ExportInput { taskId: string; format: 'xlsx' | 'csv'; images: boolean }
 export interface LoggingState { enabled: boolean; directory: string; error: string }
 export interface ExecutionEntry { id: number; time: string; level: 'info'|'success'|'warning'|'error'; message: string; platform?: PlatformId; taskId?: string }
 export interface AppState { platforms: Platform[]; tasks: Task[]; outputDir: string; version: string; logging: LoggingState; showExecutionLog: boolean; proxy: { running: boolean; port: number; certificate: string }; update: UpdateState }
 export interface DeskAPI {
   state(): Promise<AppState>; orders(taskId: string): Promise<Order[]>; start(input: StartInput): Promise<Task>
-  login(platform: PlatformId): Promise<void>; pause(id: string): Promise<void>; resume(id: string): Promise<void>; finish(id: string): Promise<void>
+  login(platform: PlatformId, mode?:CollectionMode): Promise<void>; pause(id: string): Promise<void>; resume(id: string): Promise<void>; finish(id: string): Promise<void>
   retry(id: string): Promise<void>; export(input: ExportInput): Promise<{ path: string; count: number; missing: number }>
   enrichDetails(taskId:string):Promise<void>; openOrder(taskId:string,orderId:string):Promise<void>
   chooseDirectory(): Promise<string>; openOutput(): Promise<void>; openExport(id: string): Promise<void>; clear(platform: PlatformId): Promise<boolean>

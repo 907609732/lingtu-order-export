@@ -1,0 +1,7 @@
+import {it,expect} from 'vitest'
+import ExcelJS from 'exceljs'
+import {readAlibabaOfficialReport} from '../src/main/alibaba-official-report'
+import {Store} from '../src/core/store'
+it('rejects numeric identifiers beyond Excel 15 significant digits even when JS safe',async()=>{const w=new ExcelJS.Workbook();w.addWorksheet('合成').addRows([['订单号','下单时间','实付款','商品名称'],[1234567890123456,'2026-01-02','1','甲']]);await expect(readAlibabaOfficialReport(Buffer.from(await w.xlsx.writeBuffer()),{account:'a',from:'2026-01-01',to:'2026-01-31'})).rejects.toThrow(/精度/)})
+it('rejects invalid official checkpoint persistence and ordinary checkpoint mixing',()=>{const s=new Store(':memory:');try{const t=s.create({platform:'alibaba',from:'2026-01-01',to:'2026-01-31'});expect(()=>s.update(t.id,{officialExport:{phase:'search',segmentIndex:0}})).toThrow();const o=s.create({platform:'alibaba',mode:'official-export',from:t.from,to:t.to});expect(()=>s.update(o.id,{officialExport:{phase:'search',segmentIndex:-1}})).toThrow()}finally{s.close()}})
+it('keeps Excel date wall time on month and year boundaries',async()=>{const w=new ExcelJS.Workbook();const s=w.addWorksheet('合成');s.addRows([['订单号','下单时间','实付款','商品名称'],['1',new Date('2026-01-31T20:00:00Z'),'1','甲'],['2',new Date('2026-12-31T23:30:00Z'),'1','乙']]);const r=await readAlibabaOfficialReport(Buffer.from(await w.xlsx.writeBuffer()),{account:'a',from:'2026-01-01',to:'2026-12-31'});expect(r.orders.map(o=>o.createdAt)).toEqual(['2026-01-31 20:00:00','2026-12-31 23:30:00'])})

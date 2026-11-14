@@ -1,3 +1,4 @@
+import {normalizeCollectionMode} from './collection-mode'
 import { DatabaseSync } from 'node:sqlite'
 import { randomUUID } from 'node:crypto'
 import type { Order, PlatformId, StartInput, Task } from '../shared/types'
@@ -19,10 +20,11 @@ export class Store {
   installId(): string { let id = this.setting('installId'); if (!id) { id = randomUUID(); this.setting('installId', id) } return id }
   logLaunch(version: string): void { const now = new Date().toISOString(); this.db.prepare('INSERT INTO launches(date,version,ts) VALUES(?,?,?)').run(now.slice(0, 10), version, now) }
   launchCount(): number { return Number((this.db.prepare('SELECT COUNT(*) n FROM launches').get() as any).n) }
-  tasks(): Task[] { return (this.db.prepare('SELECT payload FROM tasks ORDER BY rowid DESC').all() as any[]).map(r=>JSON.parse(r.payload)) }
-  get(id: string): Task { const row=this.db.prepare('SELECT payload FROM tasks WHERE id=?').get(id) as any; if(!row)throw new Error('任务不存在'); return JSON.parse(row.payload) }
-  create(input: StartInput): Task { checkRange(input.from,input.to); const now=new Date().toISOString(); const t:Task={platform:input.platform,from:input.from,to:input.to,plan:input.plan?createPlan(input.platform,input.from,input.to,input.plan):undefined,listOutcome:'pending',id:randomUUID(),account:'当前账号',status:'running',createdAt:now,updatedAt:now,count:0,pages:0,message:'正在准备采集',cursor:'',exportedPath:''}; this.db.prepare('INSERT INTO tasks VALUES(?,?,?)').run(t.id,t.platform,JSON.stringify(t)); return t }
-  update(id: string, patch: Partial<Task>): Task { const t={...this.get(id),...patch,id,updatedAt:new Date().toISOString()}; this.db.prepare('UPDATE tasks SET payload=? WHERE id=?').run(JSON.stringify(t),id); return t }
+  tasks(): Task[] { return (this.db.prepare('SELECT payload FROM tasks ORDER BY rowid DESC').all() as any[]).map(r=>this.normalizeTask(JSON.parse(r.payload))) }
+  get(id: string): Task { const row=this.db.prepare('SELECT payload FROM tasks WHERE id=?').get(id) as any; if(!row)throw new Error('任务不存在'); return this.normalizeTask(JSON.parse(row.payload)) }
+  private normalizeTask(t:Task):Task { const mode=normalizeCollectionMode(t.platform,t.mode); const c=t.officialExport; if(c&&(mode!=='official-export'||!['search','submit','waiting','download','import','complete'].includes(c.phase)||!Number.isInteger(c.segmentIndex)||c.segmentIndex<0|| (c.expectedTotal!==undefined&&(!Number.isSafeInteger(c.expectedTotal)||c.expectedTotal<0))))throw new Error('官方导出断点无效'); return {...t,mode} }
+  create(input: StartInput): Task { checkRange(input.from,input.to); const now=new Date().toISOString(); const t:Task={platform:input.platform,mode:normalizeCollectionMode(input.platform,input.mode),from:input.from,to:input.to,plan:input.plan?createPlan(input.platform,input.from,input.to,input.plan):undefined,listOutcome:'pending',id:randomUUID(),account:'当前账号',status:'running',createdAt:now,updatedAt:now,count:0,pages:0,message:'正在准备采集',cursor:'',exportedPath:''}; this.db.prepare('INSERT INTO tasks VALUES(?,?,?)').run(t.id,t.platform,JSON.stringify(t)); return t }
+  update(id: string, patch: Partial<Task>): Task { const t=this.normalizeTask({...this.get(id),...patch,id,updatedAt:new Date().toISOString()}); this.db.prepare('UPDATE tasks SET payload=? WHERE id=?').run(JSON.stringify(t),id); return t }
   add(id: string, orders: Order[]): number {
     const t=this.get(id); let accepted=0
     this.db.exec('BEGIN IMMEDIATE')
