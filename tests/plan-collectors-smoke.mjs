@@ -50,8 +50,8 @@ try {
     const state=await page.evaluate(()=>window.desk.state()),finished=state.tasks.find(t=>t.id===task.id)
     assert.equal(orders.length,platform==='jd'?2:1,`${platform}: ${finished.message}`)
     assert.ok(orders.every(o=>o.paidFen!==null));assert.equal(finished.listOutcome,'complete');assert.ok(finished.plan.segments.every(s=>s.status==='completed'));assert.equal(finished.plan.segments.reduce((sum,s)=>sum+s.count,0),orders.length)
-    if(platform==='xianyu'){assert.equal(finished.status,'partial');assert.equal(orders[0].address,'合成测试地址');assert.deepEqual(orders[0].missing,[])}
-    else assert.equal(finished.status,'partial')
+    if(platform==='xianyu'){assert.equal(finished.status,'completed');assert.equal(orders[0].address,'合成测试地址');assert.deepEqual(orders[0].missing,[])}
+    else assert.equal(finished.status,platform==='pdd'?'completed':'partial')
     if(platform==='pdd'){assert.equal(orders[0].detailState,'complete');assert.equal(orders[0].address,'合成测试地址');assert.equal(orders[0].items.length,1)}
     results.push({platform,count:orders.length,status:finished.status})
   }

@@ -17,7 +17,8 @@ import { pddPageRequest, pddDetailRequest } from './pdd-page'
 import { normalizePddDetail } from '../core/pdd-normalize'
 import {taobaoDetailUrl,readTaobaoDetailPage,mergeTaobaoVisibleDetail} from './taobao-detail'
 import {platformDetailUrl,mergePlatformVisibleDetail} from './platform-detail'
-import {readAlibabaExport,alibabaExportUrl} from './alibaba-detail'
+import {readAlibabaExport} from './alibaba-detail'
+import {downloadAlibabaDetailExport} from './alibaba-detail-download'
 import {isAlibabaLoginLanding,alibabaBrowserUserAgent} from './platform-login'
 import {JdExportError,clickJdExportAction} from './jd-export'
 import {downloadJdExport} from './jd-export-download'
@@ -89,7 +90,7 @@ export class Collector {
       else if(task.platform==='alibaba')await this.alibabaDetails(task,view)
       else await this.jdDetails(task,view)
       if(!this.stopped.has(task.id)&&!(task.platform==='jd'&&this.store.get(task.id).jdDetailExport)){const remaining=pendingDetails(this.store.orders(task.id)).length;this.finishCollection(task.id,{status:'partial',message:`${name}详情读取结束，${remaining?`还有 ${remaining} 笔未成功读取，可再次提取`:'已处理所有订单'}；未提供字段仍保留缺项`});this.changed()}
-    }catch(error){interrupted=true;this.diagnostics.event('collector.failed',{platform:task.platform,taskId:task.id},error);if(!this.stopped.has(task.id))this.store.update(task.id,{status:error instanceof CollectionError&&error.category==='login_or_verification'?'needs_login':'partial',message:error instanceof CollectionError||error instanceof JdExportError?error.message:'详情读取暂时中断，已保留结果，可继续提取'})}
+    }catch(error){interrupted=true;this.diagnostics.event('collector.failed',{platform:task.platform,taskId:task.id},error);if(!this.stopped.has(task.id))this.store.update(task.id,{status:error instanceof CollectionError&&error.category==='login_or_verification'?'needs_login':'partial',message:error instanceof CollectionError||error instanceof JdExportError?error.message:task.platform==='alibaba'?`1688详情处理在“${this.store.get(task.id).message}”这一步中断，已有订单和断点已保留。`:'详情读取暂时中断，已保留结果，可继续提取'})}
     finally{this.runs.delete(task.id);if(this.active===task.id)this.active=undefined;this.progress.get(task.id)?.close();this.progress.delete(task.id);const latest=this.store.get(task.id);this.diagnostics.event('collector.end',{platform:task.platform,taskId:task.id,status:latest.status,count:latest.count,interrupted,durationMs:Date.now()-started});this.changed()}
   }
   async enrichTaobao(task:Task):Promise<void>{
@@ -494,8 +495,10 @@ export class Collector {
     const records=async()=>{const response=await this.request(view,api,{serviceId:'OrderExportDataLineService.exportRecords',param:'buyerOrder'},'alibaba');if(!Array.isArray(response?.data?.data))throw new CollectionError('response_structure');return response.data.data as {path?:string;gmtCreate?:string;exportStatus?:string}[]}
     let checkpoint=this.store.get(task.id).detailExport
     if(!checkpoint){
+      this.store.update(task.id,{message:'正在读取1688已有报表记录'});this.changed()
       const previous=(await records()).filter(r=>typeof r.path==='string').map(r=>hash(r.path!));if(this.stopped.has(task.id))return
       checkpoint={requestedAt:new Date().toISOString(),previous};this.store.update(task.id,{detailExport:checkpoint})
+      this.store.update(task.id,{message:'正在申请1688官方详情报表'});this.changed()
       const response=await this.request(view,api,{serviceId:'OrderExportDataLineService.buyerExportOrder',param:JSON.stringify({exportType:'buyerOrder',startDateTime:task.from+' 00:00:00',endDateTime:task.to+' 23:59:59'})},'alibaba')
       const token=String(response?.data?.data||'');if(!/^\d{13}$/.test(token))throw new CollectionError('response_structure')
       checkpoint.token=token;this.store.update(task.id,{detailExport:checkpoint})
@@ -506,19 +509,20 @@ export class Collector {
       const candidates=all.filter(r=>{if(r.exportStatus!=='SUCCESS'||!r.path||checkpoint!.previous.includes(hash(r.path)))return false;const stamp=dateText(r.gmtCreate);if(checkpoint!.token)return stamp===dateText(Number(checkpoint!.token));const delta=Date.parse(stamp.replace(' ','T')+'+08:00')-Date.parse(checkpoint!.requestedAt);return delta>=-1000&&delta<=30000})
       if(candidates.length>1)throw new CollectionError('response_structure')
       if(candidates.length===1){
-        const response=await view.webContents.session.fetch(alibabaExportUrl(candidates[0].path!));if(!response.ok)throw new CollectionError('network')
-        if(response.url)alibabaExportUrl(response.url)
-        const reader=response.body?.getReader();if(!reader)throw new CollectionError('response_structure');const chunks:Buffer[]=[];let size=0
-        try{for(;;){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>32*1024*1024)throw new Error('官方详情文件超过32MB，请缩小日期范围');chunks.push(Buffer.from(value));if(this.stopped.has(task.id))return}}finally{await reader.cancel().catch(()=>{})}
-        const rows=await readAlibabaExport(Buffer.concat(chunks),pendingDetails(this.store.orders(task.id)))
+        this.store.update(task.id,{message:'正在下载1688官方详情报表'});this.changed()
+        const bytes=await downloadAlibabaDetailExport(candidates[0].path!,url=>view.webContents.session.fetch(url),()=>this.stopped.has(task.id))
+        if(!bytes||this.stopped.has(task.id))return
+        this.store.update(task.id,{message:'正在解析1688官方详情报表'});this.changed()
+        const rows=await readAlibabaExport(bytes,pendingDetails(this.store.orders(task.id)))
         if(this.stopped.has(task.id))return
+        this.store.update(task.id,{message:'正在核对并导入1688订单详情'});this.changed()
         await this.assertPlanAccount(view,'alibaba');this.store.add(task.id,rows);this.changed()
         this.diagnostics.event('collector.detail',{platform:'alibaba',taskId:task.id,current:rows.length,total:task.count})
         return
       }
       if(attempt<11)await delay(15000)
     }
-    if(!this.stopped.has(task.id))throw new Error('1688官方文件暂未生成，请稍后继续提取详情')
+    if(!this.stopped.has(task.id))throw new CollectionError('detail_report_pending')
   }
   private async visibleDetails(task:Task,view:WebContentsView){
     const orders=pendingDetails(this.store.orders(task.id))

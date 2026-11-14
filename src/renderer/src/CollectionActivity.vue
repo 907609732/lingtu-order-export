@@ -7,7 +7,7 @@ const official=computed(()=>props.task.mode==='official-export')
 const officialPhase=computed(()=>({search:'按月份查询订单',submit:'申请官方报表',waiting:'等待官方生成报表',download:'下载官方报表',import:'导入并自动核对',complete:'官方报表处理完成'}[props.task.officialExport?.phase||'search']))
 const running=computed(()=>props.task.status==='running')
 const details=computed(()=>(props.task.activityPhase||props.task.operation)==='details')
-const title=computed(()=>official.value?(props.task.status==='needs_login'?'需要登录 / 验证':running.value?officialPhase.value:props.task.status==='completed'?'官方报表处理完成':'官方导出已暂停'):running.value?(details.value?'正在提取订单详情':'正在采集订单'):({paused:'采集已暂停',needs_login:'需要登录 / 验证',failed:'采集遇到问题',partial:'采集未完成',running:'正在采集订单',completed:'采集完成'}[props.task.status]||'采集进度'))
+const title=computed(()=>official.value?(props.task.status==='needs_login'?'需要登录 / 验证':running.value?officialPhase.value:props.task.status==='completed'?'官方报表处理完成':'官方导出已暂停'):running.value?(details.value?'正在提取订单详情':'正在采集订单'):({paused:'采集已暂停',needs_login:'需要登录 / 验证',failed:'采集遇到问题',partial:details.value?'订单详情提取未完成':'采集未完成',running:'正在采集订单',completed:'采集完成'}[props.task.status]||'采集进度'))
 </script>
 
 <template>

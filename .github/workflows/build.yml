@@ -36,6 +36,8 @@ jobs:
         run: node tests/plan-ui-smoke.mjs
       - name: Verify visible collection activity
         run: node tests/collection-activity-smoke.mjs
+      - name: Verify detail export errors and completion with isolated data
+        run: node tests/details-platforms-smoke.mjs
       - name: Verify primary checkpoint continuation
         run: node tests/primary-resume-smoke.mjs
       - name: Verify isolated 1688 official-mode preparation UI

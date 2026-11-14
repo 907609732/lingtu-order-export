@@ -8,7 +8,7 @@ export async function downloadAlibabaDetailExport(raw:string,fetcher:(url:string
  let response:Response
  try{response=await fetcher(url)}catch{throw new CollectionError('detail_download_network')}
  if(response.url){try{alibabaExportUrl(response.url)}catch{await response.body?.cancel().catch(()=>{});throw new CollectionError('detail_download_source')}}
- if(!response.ok)throw new CollectionError('detail_download_http')
+ if(!response.ok){await response.body?.cancel().catch(()=>{});throw new CollectionError('detail_download_http')}
  const reader=response.body?.getReader();if(!reader)throw new CollectionError('detail_report_empty')
  const chunks:Buffer[]=[];let size=0
  try{

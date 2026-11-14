@@ -3,6 +3,12 @@ import {downloadAlibabaDetailExport} from '../src/main/alibaba-detail-download'
 import {readAlibabaExport} from '../src/main/alibaba-detail'
 const url='https://trade.1688.com/tradeorder-1688/report.xlsx?token=secret'
 const failure=(category:string)=>expect.objectContaining({category})
+it('cancels the response stream when an HTTP error rejects the report',async()=>{
+ let cancelled=false
+ const stream=new ReadableStream<Uint8Array>({start(c){c.enqueue(new Uint8Array([1]))},cancel(){cancelled=true}})
+ await expect(downloadAlibabaDetailExport(url,async()=>new Response(stream,{status:503}))).rejects.toMatchObject({category:'detail_download_http'})
+ expect(cancelled).toBe(true)
+})
 it('sanitizes fetch and HTTP failures with download stage categories',async()=>{
  await expect(downloadAlibabaDetailExport(url,async()=>{throw Error(url)})).rejects.toEqual(failure('detail_download_network'))
  await expect(downloadAlibabaDetailExport(url,async()=>new Response('',{status:503}))).rejects.toEqual(failure('detail_download_http'))
