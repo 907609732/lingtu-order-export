@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed,nextTick,onMounted,onUnmounted,ref } from 'vue'
-import type { AppState,Order,PlatformId,Task,StartInput } from '../../shared/types'
+import type { AppState,Order,PlatformId,Task,StartInput,CollectionMode } from '../../shared/types'
 import ExtractionPlan from './ExtractionPlan.vue'
 import {planPlatforms,detailPlatforms,pendingDetails,shouldHighlightDetails} from '../../core/extraction-plan'
 import {primaryCollectionAction,sameCollectionTime} from '../../core/primary-collection-action'
 import ExecutionLog from './ExecutionLog.vue'
 import CollectionActivity from './CollectionActivity.vue'
+import OfficialExportAudit from './OfficialExportAudit.vue'
 import OrderTable from './OrderTable.vue'
 import SupportAuthor from './SupportAuthor.vue'
 import UpdatePanel from './UpdatePanel.vue'
@@ -17,8 +18,13 @@ const state=ref<AppState|null>(null), selected=ref<PlatformId>('taobao'), taskId
 const today=new Date(Date.now()+8*3600000).toISOString().slice(0,10)
 const from=ref(today.slice(0,7)+'-01'),to=ref(today),format=ref<'xlsx'|'csv'>('xlsx'),images=ref(true),busy=ref(false),pageOpen=ref(false),section=ref<'export'|'history'|'settings'|'help'>('export'),query=ref(''),page=ref(1),notice=ref(''),error=ref(false)
 type CollectionTime=Omit<StartInput,'platform'>
-const planOpen=ref(false),timeSelections=ref<Partial<Record<PlatformId,CollectionTime>>>({})
-const collectionTime=computed(()=>timeSelections.value[selected.value])
+const planOpen=ref(false),timeSelections=ref<Record<string,CollectionTime>>({}),alibabaMode=ref<CollectionMode>('ordinary'),auditOpen=ref(false)
+const mode=computed<CollectionMode>(()=>selected.value==='alibaba'?alibabaMode.value:'ordinary')
+const officialMode=computed(()=>mode.value==='official-export')
+const officialUnavailable=computed(()=>officialMode.value&&!state.value?.alibabaOfficialExportAvailable)
+const timeKey=(platform:PlatformId,currentMode:CollectionMode='ordinary')=>platform+':'+currentMode
+const currentTimeKey=computed(()=>timeKey(selected.value,mode.value))
+const collectionTime=computed(()=>timeSelections.value[currentTimeKey.value])
 const collectionRunning=computed(()=>!!state.value?.tasks.some(t=>t.status==='running'))
 const listComplete=computed(()=>task.value?.listOutcome==='complete'||task.value?.status==='completed')
 const timeSummary=computed(()=>{
@@ -27,18 +33,18 @@ const timeSummary=computed(()=>{
  return '已选时间：'+input.from+' 至 '+input.to+(input.plan?' · 已选 '+input.plan.segments.length+' 天':'')
 })
 const segmentLabels={pending:'待采集',running:'采集中',completed:'列表已完成',paused:'已暂停',needs_attention:'需要处理'}
-function taskTime(t:Task):CollectionTime{return {from:t.from,to:t.to,...(t.plan?{plan:{granularity:t.plan.granularity,segments:t.plan.segments.map(s=>({from:s.from,to:s.to}))}}:{})}}
-function restoreTime(t?:Task){if(t&&!timeSelections.value[t.platform])timeSelections.value[t.platform]=taskTime(t);const input=timeSelections.value[selected.value];from.value=input?.from||today.slice(0,7)+'-01';to.value=input?.to||today}
-function confirmTime(input:CollectionTime){if(collectionRunning.value)return;timeSelections.value[selected.value]=input;from.value=input.from;to.value=input.to;planOpen.value=false}
+function taskTime(t:Task):CollectionTime{return {mode:t.mode||'ordinary',from:t.from,to:t.to,...(t.plan?{plan:{granularity:t.plan.granularity,segments:t.plan.segments.map(s=>({from:s.from,to:s.to}))}}:{})}}
+function restoreTime(t?:Task){const key=t?timeKey(t.platform,t.mode||'ordinary'):currentTimeKey.value;if(t&&!timeSelections.value[key])timeSelections.value[key]=taskTime(t);const input=timeSelections.value[currentTimeKey.value];from.value=input?.from||today.slice(0,7)+'-01';to.value=input?.to||today}
+function confirmTime(input:CollectionTime){if(collectionRunning.value)return;timeSelections.value[currentTimeKey.value]={...input,mode:mode.value};from.value=input.from;to.value=input.to;planOpen.value=false}
 
 const detailPending=computed(()=>pendingDetails(records.value).length)
-const primaryAction=computed(()=>primaryCollectionAction(task.value,collectionTime.value,detailPending.value))
-const primaryLabel=computed(()=>({start:'开始采集',resume:'继续采集',reset:'重置采集',running:'采集中…'}[primaryAction.value]))
+const primaryAction=computed(()=>primaryCollectionAction(task.value,collectionTime.value,detailPending.value,mode.value))
+const primaryLabel=computed(()=>(officialMode.value?{start:'官方导出',resume:'继续官方导出',reset:'重新官方导出',running:'官方导出中…'}:{start:'开始采集',resume:'继续采集',reset:'重置采集',running:'采集中…'})[primaryAction.value])
 const changedTime=computed(()=>!!task.value&&!!collectionTime.value&&!sameCollectionTime(task.value,collectionTime.value))
-const resumeGuidance=computed(()=>primaryAction.value==='resume'?(task.value?.status==='needs_login'?'请先登录 / 完成验证，再点击②'+((task.value?.activityPhase||task.value?.operation)==='details'?'继续提取订单详情':'从断点继续采集'):'点击②'+((task.value?.activityPhase||task.value?.operation)==='details'?'继续提取订单详情':'从断点继续采集')):'')
-const detailHighlight=computed(()=>shouldHighlightDetails(task.value,records.value))
+const resumeGuidance=computed(()=>officialMode.value?(primaryAction.value==='resume'?(task.value?.status==='needs_login'?'请先在平台页完成登录 / 验证，再点击②继续官方导出。':'点击②继续官方导出，将从已保存的阶段继续。'):''):primaryAction.value==='resume'?(task.value?.status==='needs_login'?'请先登录 / 完成验证，再点击②'+((task.value?.activityPhase||task.value?.operation)==='details'?'继续提取订单详情':'从断点继续采集'):'点击②'+((task.value?.activityPhase||task.value?.operation)==='details'?'继续提取订单详情':'从断点继续采集')):'')
+const detailHighlight=computed(()=>!officialMode.value&&shouldHighlightDetails(task.value,records.value))
 const platform=computed(()=>state.value?.platforms.find(p=>p.id===selected.value))
-const tasks=computed(()=>state.value?.tasks.filter(t=>t.platform===selected.value)||[])
+const tasks=computed(()=>state.value?.tasks.filter(t=>t.platform===selected.value&&(t.mode||'ordinary')===mode.value)||[])
 const task=computed(()=>state.value?.tasks.find(t=>t.id===taskId.value))
 const activityVisible=computed(()=>!!task.value&&(['running','paused','needs_login','failed'].includes(task.value.status)||(task.value.status==='partial'&&((!!task.value.listOutcome&&task.value.listOutcome!=='complete')||(task.value.operation==='details'&&detailPending.value>0)))))
 const emptyResult=computed(()=>task.value?.status==='completed'&&task.value.count===0)
@@ -49,11 +55,13 @@ const labels:Record<string,string>={running:'正在采集',paused:'已暂停',ne
 let off:(()=>void)|undefined;let offUpdate:(()=>void)|undefined;let refreshPending=false
 async function refresh(){state.value=await desk.state();if(taskId.value)records.value=await desk.orders(taskId.value)}
 async function action(fn:()=>Promise<unknown>,message=''){busy.value=true;notice.value='';error.value=false;try{await fn();if(message)notice.value=message;await refresh()}catch(e){notice.value=String(e instanceof Error?e.message:e).replace(/^Error invoking remote method '[^']+': Error: /,'');error.value=true}finally{busy.value=false}}
-async function selectPlatform(id:PlatformId){planOpen.value=false;if(state.value?.tasks.some(t=>t.status==='running'&&t.platform!==id)){notice.value='请先暂停当前平台的采集任务，再切换平台';error.value=true;return}await desk.hidePage();pageOpen.value=false;selected.value=id;section.value='export';const latest=state.value?.tasks.find(t=>t.platform===id&&t.status==='running')||state.value?.tasks.find(t=>t.platform===id);taskId.value=latest?.id||'';restoreTime(latest);query.value='';page.value=1;records.value=taskId.value?await desk.orders(taskId.value):[]}
-async function clearPlatform(){const id=selected.value,name=platform.value?.name;await action(async()=>{if(await desk.clear(id)){if(selected.value===id){taskId.value='';records.value=[];query.value='';page.value=1;delete timeSelections.value[id];restoreTime();planOpen.value=false}notice.value=`已清理 ${name} 的本机采集缓存，已导出的文件保留。`}})}
-async function openPage(){await action(async()=>{await desk.login(selected.value);pageOpen.value=true})}
+async function selectPlatform(id:PlatformId){planOpen.value=false;if(state.value?.tasks.some(t=>t.status==='running'&&t.platform!==id)){notice.value='请先暂停当前平台的采集任务，再切换平台';error.value=true;return}await desk.hidePage();pageOpen.value=false;selected.value=id;section.value='export';const latest=tasks.value.find(t=>t.status==='running')||tasks.value[0];taskId.value=latest?.id||'';restoreTime(latest);query.value='';page.value=1;records.value=taskId.value?await desk.orders(taskId.value):[]}
+async function selectMode(value:CollectionMode){if(busy.value||collectionRunning.value||value===mode.value)return;await desk.hidePage();pageOpen.value=false;planOpen.value=false;auditOpen.value=false;alibabaMode.value=value;const latest=tasks.value[0];taskId.value=latest?.id||'';restoreTime(latest);query.value='';page.value=1;records.value=latest?await desk.orders(latest.id):[]}
+function showAudit(){auditOpen.value=!auditOpen.value}
+async function clearPlatform(){const id=selected.value,name=platform.value?.name;await action(async()=>{if(await desk.clear(id)){if(selected.value===id){taskId.value='';records.value=[];query.value='';page.value=1;for(const key of Object.keys(timeSelections.value))if(key.startsWith(id+':'))delete timeSelections.value[key];restoreTime();planOpen.value=false}notice.value=`已清理 ${name} 的本机采集缓存，已导出的文件保留。`}})}
+async function openPage(){await action(async()=>{await desk.login(selected.value,mode.value);pageOpen.value=true})}
 async function hidePage(){await desk.hidePage();pageOpen.value=false}
-async function start(){const input=collectionTime.value;if(!input||busy.value||collectionRunning.value)return;await action(async()=>{if(primaryAction.value==='resume'){await desk.resume(taskId.value);await nextTick();executionPanel.value?.reveal(false);return}const t=await desk.start({platform:selected.value,from:input.from,to:input.to,...(input.plan?{plan:{granularity:input.plan.granularity,segments:input.plan.segments.map(s=>({from:s.from,to:s.to}))}}:{})});taskId.value=t.id;page.value=1;await nextTick();executionPanel.value?.reveal(false)})}
+async function start(){const input=collectionTime.value;if(!input||busy.value||collectionRunning.value||officialUnavailable.value)return;await action(async()=>{if(primaryAction.value==='resume'){await desk.resume(taskId.value);await nextTick();executionPanel.value?.reveal(false);return}const t=await desk.start({platform:selected.value,mode:mode.value,from:input.from,to:input.to,...(input.plan?{plan:{granularity:input.plan.granularity,segments:input.plan.segments.map(s=>({from:s.from,to:s.to}))}}:{})});taskId.value=t.id;page.value=1;await nextTick();executionPanel.value?.reveal(false)})}
 async function enrich(){await action(async()=>{await desk.enrichDetails(taskId.value);await nextTick();executionPanel.value?.reveal(false)})}
 async function openOrder(orderId:string){await action(async()=>{await desk.openOrder(taskId.value,orderId);pageOpen.value=true})}
 async function chooseTask(event:Event){const id=(event.target as HTMLSelectElement).value,t=tasks.value.find(t=>t.id===id);if(t)await openTask(t)}
@@ -62,7 +70,7 @@ async function choose(){await hidePage();await action(()=>desk.chooseDirectory()
 async function toggleLogging(){const enabled=!state.value?.logging.enabled;await action(()=>desk.setLogging(enabled),enabled?'问题排查日志已开启，复现问题后可打开日志文件夹查看。':'问题排查日志已关闭，已有日志仍保留在本机。')}
 async function toggleExecutionLog(){const visible=!state.value?.showExecutionLog;await action(()=>desk.setExecutionLogVisible(visible),visible?'执行日志已显示，回到采集页面即可查看。':'执行日志面板已隐藏，重启后保留选择。')}
 async function navigate(s:'export'|'history'|'settings'|'help'){await hidePage();section.value=s}
-async function openTask(t:Task){if(state.value?.tasks.some(current=>current.status==='running'&&current.id!==t.id)){notice.value='请先暂停当前采集任务，再查看其他任务';error.value=true;return}selected.value=t.platform;taskId.value=t.id;timeSelections.value[t.platform]=taskTime(t);restoreTime(t);section.value='export';page.value=1;await refresh()}
+async function openTask(t:Task){if(state.value?.tasks.some(current=>current.status==='running'&&current.id!==t.id)){notice.value='请先暂停当前采集任务，再查看其他任务';error.value=true;return}selected.value=t.platform;if(t.platform==='alibaba')alibabaMode.value=t.mode||'ordinary';taskId.value=t.id;timeSelections.value[timeKey(t.platform,t.mode||'ordinary')]=taskTime(t);auditOpen.value=false;restoreTime(t);section.value='export';page.value=1;await refresh()}
 async function openUpdate(){await navigate('settings');await nextTick();const panel=document.getElementById('software-update');panel?.scrollIntoView({behavior:'smooth',block:'center'});panel?.focus({preventScroll:true})}
 function openWebsite(){void desk.openWebsite()}
 function openContact(){void action(()=>desk.openContact())}
@@ -84,11 +92,12 @@ onUnmounted(()=>{off?.();offUpdate?.()})
       <div class="content" :class="section">
         <div v-if="notice" class="notice" :class="{error}">{{notice}}<button @click="notice=''">×</button></div>
         <template v-if="section==='export'">
-          <div class="page-title export-title"><div class="platform-heading"><div class="eyebrow">ORDER EXPORT</div><h1>{{platform?.name}}订单导出</h1><p>选择日期，读取买家订单，再保存到你的电脑。</p></div><section v-if="!pageOpen" class="compact-controls header-controls" aria-label="采集与导出操作">
+          <div class="page-title export-title"><div class="platform-heading"><div class="eyebrow">ORDER EXPORT</div><div class="platform-title-row"><h1>{{platform?.name}}订单导出</h1><div v-if="selected==='alibaba'" class="collection-mode-switch" role="group" aria-label="1688导出模式"><button :aria-pressed="mode==='ordinary'" :disabled="busy||collectionRunning" @click="selectMode('ordinary')">模式一 · 普通采集</button><button :aria-pressed="officialMode" :disabled="busy||collectionRunning" @click="selectMode('official-export')">模式二 · 官方导出</button></div></div><p>选择日期，读取买家订单，再保存到你的电脑。</p></div><section v-if="!pageOpen" class="compact-controls header-controls" aria-label="采集与导出操作">
               <div class="collection-actions four-step-actions">
                 <button class="secondary plan-button" :disabled="busy||collectionRunning" @click="planOpen=true">① 选择采集时间</button>
-                <button class="primary start" :disabled="busy||collectionRunning||!collectionTime" :title="!collectionTime?'请先选择采集时间':primaryAction==='resume'?resumeGuidance:primaryAction==='reset'?'按当前所选时间重新采集，历史任务保留':'按所选时间开始采集'" @click="start">② {{primaryLabel}}</button>
-                <button :class="['secondary',{'detail-highlight':detailHighlight}]" :disabled="!detailPlatforms.includes(selected)||!detailPending||busy||collectionRunning" :title="!detailPlatforms.includes(selected)?'此平台不支持独立提取订单详情':selected==='jd'?'通过京东官方导出补充收件信息，按本任务日期范围匹配':detailHighlight?'列表已采集完成，请提取详情':'提取尚未成功读取的官方订单详情'" @click="enrich">③ 提取订单详情<span v-if="detailPlatforms.includes(selected)&&detailPending"> · {{detailPending}}</span></button>
+                <button class="primary start" :disabled="busy||collectionRunning||!collectionTime||officialUnavailable" :title="!collectionTime?'请先选择采集时间':primaryAction==='resume'?resumeGuidance:primaryAction==='reset'?'按当前所选时间重新采集，历史任务保留':'按所选时间开始采集'" @click="start">② {{primaryLabel}}</button>
+                <button v-if="officialMode" class="secondary" :disabled="!task?.officialExport?.audit||busy||collectionRunning" title="官方报表下载后自动核对，完成后可查看结果" @click="showAudit">③ {{task?.officialExport?.audit?'查看核对结果':'自动核对'}}</button>
+                <button v-else :class="['secondary',{'detail-highlight':detailHighlight}]" :disabled="!detailPlatforms.includes(selected)||!detailPending||busy||collectionRunning" :title="!detailPlatforms.includes(selected)?'此平台不支持独立提取订单详情':selected==='jd'?'通过京东官方导出补充收件信息，按本任务日期范围匹配':detailHighlight?'列表已采集完成，请提取详情':'提取尚未成功读取的官方订单详情'" @click="enrich">③ 提取订单详情<span v-if="detailPlatforms.includes(selected)&&detailPending"> · {{detailPending}}</span></button>
                 <button class="primary" :disabled="!records.length||busy||collectionRunning" title="导出本任务全部订单，表格筛选不改变导出范围" @click="exportFile">④ 导出文件 ↓</button>
                 <details class="export-options"><summary>导出设置 ▾</summary><div class="export-options-panel"><label class="inline-label">文件格式<select v-model="format"><option value="xlsx">Excel (.xlsx)</option><option value="csv">CSV (.csv)</option></select></label><label class="checkbox"><input v-model="images" type="checkbox" :disabled="format==='csv'">嵌入商品图片</label><button class="text-button" @click="choose">{{state?.outputDir?'更改保存目录':'选择保存目录'}} ↗</button><p :title="state?.outputDir">{{state?.outputDir||'首次导出时选择保存目录'}}</p></div></details>
               </div>
@@ -101,6 +110,7 @@ onUnmounted(()=>{off?.();offUpdate?.()})
             </section><div class="button-row platform-actions"><button v-if="!pageOpen" class="secondary danger" :disabled="busy||!state||state.tasks.some(t=>t.status==='running')" :title="`清理 ${platform?.name} 的本机任务和订单记录，不删除已导出文件`" @click="clearPlatform">清理当前平台缓存</button><button class="secondary" @click="pageOpen?hidePage():openPage()" :disabled="busy">{{pageOpen?'返回导出台':platform?.mode==='proxy'?'打开平台页面':'登录 / 查看平台页'}}</button></div></div>
           <div v-if="pageOpen" class="browser-placeholder"><p v-if="selected==='alibaba'">1688 使用淘宝／阿里账号登录，出现淘宝登录页属于官方跳转。登录后会返回 1688，再点击右上角“返回导出台”。</p><p v-else>请在下方的官方平台页面完成登录。完成后点击右上角“返回导出台”。</p></div>
           <template v-else>
+            <p v-if="officialMode" class="official-mode-note" role="note">{{officialUnavailable?'官方页面导出流程尚待验证，暂未开放自动导出。所选月份与历史任务会保留。':'按所选月份自动查询、下载并核对；登录或验证时请在平台页完成后继续。范围完整性以核对结果为准。'}}</p>
             <section v-if="platform?.mode==='proxy'" class="proxy-guide">
               <div><strong>微信小程序辅助采集</strong><span class="tag">{{state?.proxy.running?'监听已开启':'需要首次设置'}}</span><p>沿用综合版的本机采集方式。开启后在微信中打开对应平台的买家订单列表，已读取的订单会出现在这里。</p></div>
               <div class="button-row"><button class="secondary" :disabled="busy" @click="action(()=>desk.proxyStart(selected),'本机监听已开启，地址 127.0.0.1:17869。请完成下方证书与代理设置。')">开启辅助采集</button><button class="text-button" :disabled="!state?.proxy.running" @click="action(()=>desk.certificate())">打开本机证书</button><button class="text-button" @click="action(()=>desk.proxySettings())">打开代理设置</button></div>
@@ -108,10 +118,11 @@ onUnmounted(()=>{off?.();offUpdate?.()})
             </section>
             <div v-if="detailHighlight" class="detail-prompt" role="status">{{selected==='jd'?'通过京东官方导出补充收件信息，自动按本任务日期范围匹配，可暂停后继续。':'列表已采集完成，请提取详情'}} <span>· {{detailPending}} 笔待提取</span></div>
             <CollectionActivity v-if="task && activityVisible" :task="task" :pending-details="detailPending" :resume-guidance="resumeGuidance" />
+            <OfficialExportAudit v-if="officialMode && task?.officialExport?.audit" :audit="task.officialExport.audit" :expanded="auditOpen" @toggle="showAudit" />
             <details v-if="task?.plan" class="plan-inline">
               <summary><strong>采集进度 {{task.plan.segments.filter(s=>s.status==='completed').length}} / {{task.plan.segments.length}}</strong><span :title="task.message">{{task.message}}</span><span class="plan-expand">展开进度</span></summary>
               <div class="plan-segments" aria-label="采集计划进度"><div v-for="s in task.plan.segments" :key="s.id" :class="s.status"><strong>{{task.plan.granularity==='month'?s.from.slice(0,7):s.from}}</strong><small>{{s.from}} 至 {{s.to}}</small><span>{{segmentLabels[s.status]}} · {{s.count}} 笔</span></div></div>
-              <p class="plan-note">列表已完成仅表示该日期段的订单列表已读完，详情可在第三步补充。</p>
+              <p class="plan-note">{{officialMode?'逐月执行官方导出、下载与核对；范围完整性以核对结果为准。':'列表已完成仅表示该日期段的订单列表已读完，详情可在第三步补充。'}}</p>
             </details>
             <section class="results-card compact-results">
               <div v-if="!records.length" class="results-header"><h2>采集结果 <span class="count">{{records.length}}</span></h2><select v-if="tasks.length" :value="taskId" aria-label="查看历史采集任务" :disabled="busy||task?.status==='running'" @change="chooseTask"><option v-for="t in tasks" :key="t.id" :value="t.id">{{t.from}} 至 {{t.to}} · {{t.count}} 笔 · {{labels[t.status]}}</option></select></div>
@@ -123,7 +134,7 @@ onUnmounted(()=>{off?.();offUpdate?.()})
             <div class="bottom-note">采集结果仅保存在本机，可随时重新导出。平台尚需逐一完成真实订单验收。</div>
           </template>
         </template>
-        <template v-else-if="section==='history'"><div class="page-title"><div><div class="eyebrow">EXPORT HISTORY</div><h1>导出任务</h1><p>保留每次采集的结果，方便继续读取和重新导出。</p></div></div><section class="results-card"><div v-if="!state?.tasks.length" class="empty-state"><h3>暂无导出任务</h3><p>选择左侧平台开始第一次采集。</p></div><button v-for="t in state?.tasks" :key="t.id" class="history-row" @click="openTask(t)"><div><strong>{{state?.platforms.find(p=>p.id===t.platform)?.name}}</strong><span>{{t.from}} 至 {{t.to}}</span></div><span>{{t.count}} 笔</span><span class="tag">{{labels[t.status]}}</span><b>查看 →</b></button></section></template>
+        <template v-else-if="section==='history'"><div class="page-title"><div><div class="eyebrow">EXPORT HISTORY</div><h1>导出任务</h1><p>保留每次采集的结果，方便继续读取和重新导出。</p></div></div><section class="results-card"><div v-if="!state?.tasks.length" class="empty-state"><h3>暂无导出任务</h3><p>选择左侧平台开始第一次采集。</p></div><button v-for="t in state?.tasks" :key="t.id" class="history-row" @click="openTask(t)"><div><strong>{{state?.platforms.find(p=>p.id===t.platform)?.name}}</strong><span>{{t.from}} 至 {{t.to}}{{t.platform==='alibaba'?(t.mode==='official-export'?' · 官方导出':' · 普通采集'):''}}</span></div><span>{{t.count}} 笔</span><span class="tag">{{labels[t.status]}}</span><b>查看 →</b></button></section></template>
         <template v-else-if="section==='settings'">
           <div class="page-title"><div><div class="eyebrow">PREFERENCES</div><h1>保存与设置</h1><p>简单设置，方便下次继续使用。</p></div></div>
           <section class="settings-card">

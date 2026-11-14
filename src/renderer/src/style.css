@@ -208,3 +208,11 @@ h2{font-size:13px;font-weight:600}
 .plan-inline>.plan-segments{margin-top:10px}.plan-inline>summary strong{white-space:nowrap}
 .plan-date-range{display:flex;align-items:center;gap:12px;font-size:12px}.plan-date-range label{display:flex;align-items:center;gap:8px}.plan-date-range input{height:32px;padding:5px 8px;width:150px}
 @media(max-width:1200px){.export-title .header-controls .four-step-actions{justify-content:flex-start;gap:6px}}
+
+/* 1688 modes share the heading and wrap without crowding the action row. */
+.platform-title-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px}
+.collection-mode-switch{display:inline-flex;flex-wrap:wrap;gap:2px;padding:3px;background:#f0f2f6;border-radius:7px}
+.collection-mode-switch button{height:30px;min-height:30px;padding:0 9px;border:0;border-radius:5px;background:transparent;font-size:11px;color:var(--secondary);white-space:nowrap}
+.collection-mode-switch button[aria-pressed="true"]{background:#fff;color:var(--accent);box-shadow:0 1px 3px #1b315012}
+.collection-mode-switch button:disabled{cursor:not-allowed;opacity:.55}
+.official-mode-note{margin:0 0 12px;padding:9px 12px;border:1px solid #eedbb6;border-radius:7px;background:#fff9ec;color:#94621e;font-size:12px;line-height:1.6}
