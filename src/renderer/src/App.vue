@@ -6,6 +6,7 @@ import {planPlatforms,detailPlatforms,pendingDetails,shouldHighlightDetails} fro
 import type {PlanInput} from '../../shared/types'
 import ExecutionLog from './ExecutionLog.vue'
 import OrderTable from './OrderTable.vue'
+import SupportAuthor from './SupportAuthor.vue'
 import {Clock,QuestionFilled,Setting,Lock} from '@element-plus/icons-vue'
 import logoUrl from './assets/logo-icon.png'
 const desk = window.desk
@@ -103,6 +104,7 @@ onUnmounted(()=>{off?.();offUpdate?.()})
           <section class="settings-card"><h2>导出文件夹</h2><p class="path">{{state?.outputDir||'还未选择，首次导出前设置即可'}}</p><div class="button-row"><button class="primary" @click="choose">选择文件夹</button><button class="secondary" :disabled="!state?.outputDir" @click="action(()=>desk.openOutput())">打开文件夹</button></div></section>
           <section class="settings-card"><h2>当前验证状态</h2><p>开发验证版。程序安装、样例解析和文件生成，与真实平台采集验收分别记录。请先使用短日期范围核对订单。</p></section>
           <section class="settings-card about-card"><h2>关于</h2><p class="about-brand">电商平台采购订单导出 <span class="by">BY 五成</span></p><div class="button-row"><button class="secondary" :disabled="busy" @click="openWebsite">访问官网 ↗</button><button class="secondary" :disabled="busy" @click="openRepository">GitHub 仓库 ↗</button><button class="secondary" :disabled="busy" @click="checkUpdate">检查更新</button></div><p v-if="state?.update" class="update-tip">发现新版本 v{{state.update.latest}}，<a href="#" @click.prevent="openUpdate">前往下载</a></p></section>
+          <SupportAuthor />
         </template>
         <template v-else>
           <div class="page-title"><div><div class="eyebrow">GUIDE</div><h1>使用教程</h1><p>了解这个软件能做什么，以及如何导出你的订单。</p></div></div>
