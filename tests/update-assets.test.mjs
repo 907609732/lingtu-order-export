@@ -33,6 +33,15 @@ test('rejects a release version mismatch', () => fixture(async ({folder}) => {
 test('accepts full-installer updates without any differential blockmap', () => fixture(async ({folder}) => {
   await assert.doesNotReject(verifyUpdateAssets(folder, '0.1.22'))
 }))
+test('accepts standard non-differential builder manifests where size is optional', () => fixture(async ({folder, manifest}) => {
+  await writeFile(join(folder, 'latest.yml'), manifest.replace(/^    size:.*\n/m, ''))
+  const result = await verifyUpdateAssets(folder, '0.1.22')
+  assert.ok(result.size > 0)
+}))
+test('rejects invalid declared installer size', () => fixture(async ({folder, manifest}) => {
+  await writeFile(join(folder, 'latest.yml'), manifest.replace(/^    size:.*$/m, '    size: -1'))
+  await assert.rejects(verifyUpdateAssets(folder, '0.1.22'), /size/)
+}))
 test('rejects manifest paths outside the fixed installer name', () => fixture(async ({folder, name, manifest}) => {
   await writeFile(join(folder, 'latest.yml'), manifest.replaceAll(name, '../' + name))
   await assert.rejects(verifyUpdateAssets(folder, '0.1.22'), /filename|path/)

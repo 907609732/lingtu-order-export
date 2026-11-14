@@ -15,9 +15,10 @@ export async function verifyUpdateAssets(directory, expectedVersion) {
     throw new Error('Manifest filename/path differs from expected installer')
   }
   const entry = info.files[0]
-  if (!Number.isSafeInteger(entry.size) || entry.size <= 0) throw new Error('Invalid installer size')
+  // electron-builder omits this optional field when differentialPackage is false.
+  if ('size' in entry && (!Number.isSafeInteger(entry.size) || entry.size <= 0)) throw new Error('Invalid installer size')
   const bytes = await readFile(join(directory, name))
-  if (bytes.length !== entry.size) throw new Error('Installer size mismatch')
+  if (!bytes.length || ('size' in entry && bytes.length !== entry.size)) throw new Error('Installer size mismatch')
   const sha512 = createHash('sha512').update(bytes).digest('base64')
   if (entry.sha512 !== sha512 || info.sha512 !== sha512) throw new Error('Installer SHA-512 mismatch')
   return {

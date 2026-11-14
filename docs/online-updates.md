@@ -15,7 +15,7 @@ GitHub 直连不等于国内 CDN。大陆用户可能访问慢或连接失败；
 ## 构建与发布
 
 1. 推送代码触发 Build Windows。测试、构建后产出 `LingtuOrderExport-VERSION-Setup.exe` 和 `latest.yml`。
-2. `node scripts/verify-update-assets.mjs release VERSION` 核对清单版本、唯一固定文件名、大小和 SHA-512。整个产物包作为 GitHub Actions artifact 保存。
+2. `node scripts/verify-update-assets.mjs release VERSION` 核对清单版本、唯一固定文件名和 SHA-512，并记录安装包实际大小；清单声明大小时额外核对一致性（关闭差分后 builder 通常省略该可选字段）。整个产物包作为 GitHub Actions artifact 保存。
 3. 本地下载构建产物，核对 SHA-256，完成隔离验收后准备草稿 Release；标签和 `targetCommitish` 必须指向构建的确切提交。
 4. 经用户授权发布后，运行 Publish verified release 并传入成功 Build Windows 的 run ID、已有草稿 tag、已验收安装器的 SHA-256。流程验证来源，先上传 exe，再上传清单；重新下载附件并核验后才将草稿公开为 latest。
 5. 不覆写已公开同版本的安装包和清单。修复应提升版本号、重新构建发布。缺失清单或网络失败应显示检查失败，不应显示已是最新版。
