@@ -32,6 +32,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Update asset verification failed' }
       - name: Check real Electron update UI and IPC with isolated data
         run: node tests/update-ui-smoke.mjs
+      - name: Verify single-instance update safety
+        run: node tests/update-single-instance-smoke.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: procurement-order-export-windows
