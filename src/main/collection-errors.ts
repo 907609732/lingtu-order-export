@@ -28,6 +28,17 @@ export const collectionFailureText:Record<string,string>={
   network:'网络请求失败，请检查网络后重试。',
   page_not_ready:'平台页面尚未准备好，请等订单列表显示后继续。',
   account_changed:'当前登录账号与任务账号不一致，或旧任务尚未绑定账号；请切回原账号，或新建采集任务。',
+  detail_download_network:'1688详情文件下载请求失败，请检查网络后继续。',
+  detail_download_source:'1688详情文件下载跳转到不受支持的报表地址，已停止导入。',
+  detail_download_http:'1688详情文件下载返回HTTP错误，已有结果已保留。',
+  detail_download_interrupted:'1688详情文件下载中断，已有结果已保留，可继续提取。',
+  detail_report_pending:'1688官方详情报表暂未生成，已有订单和报表申请已保留，可稍后继续提取。',
+  detail_report_empty:'1688详情文件为空，已有结果已保留。',
+  detail_report_too_large:'1688详情文件超过32MB，请缩小日期范围。',
+  detail_report_format:'1688详情文件不是可识别的Excel报表，已有结果已保留。',
+  detail_report_parse:'1688详情Excel报表解析失败，已有结果已保留。',
+  detail_report_no_match:'1688详情报表未匹配到当前待处理订单，已有结果已保留。',
+  detail_report_no_fields:'1688详情报表未包含可导入的详情字段，已有结果已保留。',
   response_structure:'平台返回的订单结构暂未识别，已有结果已保留。'
 }
 export class CollectionError extends Error {
