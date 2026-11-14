@@ -34,7 +34,7 @@ export interface StartInput { mode?:CollectionMode; platform: PlatformId; from: 
 export interface ExportInput { taskId: string; format: 'xlsx' | 'csv'; images: boolean }
 export interface LoggingState { enabled: boolean; directory: string; error: string }
 export interface ExecutionEntry { id: number; time: string; level: 'info'|'success'|'warning'|'error'; message: string; platform?: PlatformId; taskId?: string }
-export interface AppState { alibabaOfficialExportAvailable?:boolean; platforms: Platform[]; tasks: Task[]; outputDir: string; version: string; logging: LoggingState; showExecutionLog: boolean; proxy: { running: boolean; port: number; certificate: string }; update: UpdateState }
+export interface AppState { platformRuns?:{platform:PlatformId;taskId:string;stopping:boolean}[]; exporting?:boolean; alibabaOfficialExportAvailable?:boolean; platforms: Platform[]; tasks: Task[]; outputDir: string; version: string; logging: LoggingState; showExecutionLog: boolean; proxy: { platform?:PlatformId; running: boolean; port: number; certificate: string }; update: UpdateState }
 export interface DeskAPI {
   state(): Promise<AppState>; orders(taskId: string): Promise<Order[]>; start(input: StartInput): Promise<Task>
   login(platform: PlatformId, mode?:CollectionMode): Promise<void>; pause(id: string): Promise<void>; resume(id: string): Promise<void>; finish(id: string): Promise<void>
