@@ -198,6 +198,7 @@ h2{font-size:13px;font-weight:600}
 
 /* Four-step collection controls and their confirmed time selection. */
 .four-step-actions{justify-content:flex-start;flex-wrap:wrap;margin-left:0;gap:7px}
+.collection-time-change{font-size:11px;color:var(--secondary);margin-top:6px;line-height:1.5}
 .collection-time-summary{font-size:11px;color:var(--secondary);margin-top:8px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .collection-secondary-actions{display:flex;gap:14px;align-items:center;margin-top:6px;font-size:11px}
 .plan-inline{display:block;padding:9px 12px;border:1px solid #dceafb;border-radius:8px;background:#f5f9ff}

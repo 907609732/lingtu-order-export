@@ -3,6 +3,7 @@ import { computed,nextTick,onMounted,onUnmounted,ref } from 'vue'
 import type { AppState,Order,PlatformId,Task,StartInput } from '../../shared/types'
 import ExtractionPlan from './ExtractionPlan.vue'
 import {planPlatforms,detailPlatforms,pendingDetails,shouldHighlightDetails} from '../../core/extraction-plan'
+import {primaryCollectionAction,sameCollectionTime} from '../../core/primary-collection-action'
 import ExecutionLog from './ExecutionLog.vue'
 import CollectionActivity from './CollectionActivity.vue'
 import OrderTable from './OrderTable.vue'
@@ -31,11 +32,15 @@ function restoreTime(t?:Task){if(t&&!timeSelections.value[t.platform])timeSelect
 function confirmTime(input:CollectionTime){if(collectionRunning.value)return;timeSelections.value[selected.value]=input;from.value=input.from;to.value=input.to;planOpen.value=false}
 
 const detailPending=computed(()=>pendingDetails(records.value).length)
+const primaryAction=computed(()=>primaryCollectionAction(task.value,collectionTime.value,detailPending.value))
+const primaryLabel=computed(()=>({start:'开始采集',resume:'继续采集',reset:'重置采集',running:'采集中…'}[primaryAction.value]))
+const changedTime=computed(()=>!!task.value&&!!collectionTime.value&&!sameCollectionTime(task.value,collectionTime.value))
+const resumeGuidance=computed(()=>primaryAction.value==='resume'?(task.value?.status==='needs_login'?'请先登录 / 完成验证，再点击②'+((task.value?.activityPhase||task.value?.operation)==='details'?'继续提取订单详情':'从断点继续采集'):'点击②'+((task.value?.activityPhase||task.value?.operation)==='details'?'继续提取订单详情':'从断点继续采集')):'')
 const detailHighlight=computed(()=>shouldHighlightDetails(task.value,records.value))
 const platform=computed(()=>state.value?.platforms.find(p=>p.id===selected.value))
 const tasks=computed(()=>state.value?.tasks.filter(t=>t.platform===selected.value)||[])
 const task=computed(()=>state.value?.tasks.find(t=>t.id===taskId.value))
-const activityVisible=computed(()=>!!task.value&&(['running','paused','needs_login','failed'].includes(task.value.status)||(task.value.status==='partial'&&!!task.value.listOutcome&&task.value.listOutcome!=='complete')))
+const activityVisible=computed(()=>!!task.value&&(['running','paused','needs_login','failed'].includes(task.value.status)||(task.value.status==='partial'&&((!!task.value.listOutcome&&task.value.listOutcome!=='complete')||(task.value.operation==='details'&&detailPending.value>0)))))
 const emptyResult=computed(()=>task.value?.status==='completed'&&task.value.count===0)
 const filtered=computed(()=>records.value.filter(o=>(o.id+' '+o.shop+' '+o.items.map(i=>i.title).join(' ')).includes(query.value)))
 const shown=computed(()=>filtered.value.slice((page.value-1)*30,page.value*30))
@@ -48,7 +53,7 @@ async function selectPlatform(id:PlatformId){planOpen.value=false;if(state.value
 async function clearPlatform(){const id=selected.value,name=platform.value?.name;await action(async()=>{if(await desk.clear(id)){if(selected.value===id){taskId.value='';records.value=[];query.value='';page.value=1;delete timeSelections.value[id];restoreTime();planOpen.value=false}notice.value=`已清理 ${name} 的本机采集缓存，已导出的文件保留。`}})}
 async function openPage(){await action(async()=>{await desk.login(selected.value);pageOpen.value=true})}
 async function hidePage(){await desk.hidePage();pageOpen.value=false}
-async function start(){const input=collectionTime.value;if(!input||collectionRunning.value)return;await action(async()=>{const t=await desk.start({platform:selected.value,from:input.from,to:input.to,...(input.plan?{plan:{granularity:input.plan.granularity,segments:input.plan.segments.map(s=>({from:s.from,to:s.to}))}}:{})});taskId.value=t.id;page.value=1;await nextTick();executionPanel.value?.reveal(false)})}
+async function start(){const input=collectionTime.value;if(!input||busy.value||collectionRunning.value)return;await action(async()=>{if(primaryAction.value==='resume'){await desk.resume(taskId.value);await nextTick();executionPanel.value?.reveal(false);return}const t=await desk.start({platform:selected.value,from:input.from,to:input.to,...(input.plan?{plan:{granularity:input.plan.granularity,segments:input.plan.segments.map(s=>({from:s.from,to:s.to}))}}:{})});taskId.value=t.id;page.value=1;await nextTick();executionPanel.value?.reveal(false)})}
 async function enrich(){await action(async()=>{await desk.enrichDetails(taskId.value);await nextTick();executionPanel.value?.reveal(false)})}
 async function openOrder(orderId:string){await action(async()=>{await desk.openOrder(taskId.value,orderId);pageOpen.value=true})}
 async function chooseTask(event:Event){const id=(event.target as HTMLSelectElement).value,t=tasks.value.find(t=>t.id===id);if(t)await openTask(t)}
@@ -82,17 +87,16 @@ onUnmounted(()=>{off?.();offUpdate?.()})
           <div class="page-title export-title"><div class="platform-heading"><div class="eyebrow">ORDER EXPORT</div><h1>{{platform?.name}}订单导出</h1><p>选择日期，读取买家订单，再保存到你的电脑。</p></div><section v-if="!pageOpen" class="compact-controls header-controls" aria-label="采集与导出操作">
               <div class="collection-actions four-step-actions">
                 <button class="secondary plan-button" :disabled="busy||collectionRunning" @click="planOpen=true">① 选择采集时间</button>
-                <button class="primary start" :disabled="busy||collectionRunning||!collectionTime" :title="!collectionTime?'请先选择采集时间':listComplete?'按当前所选时间重新采集，历史任务保留':'按所选时间开始采集'" @click="start">② {{listComplete?'重置采集':'开始采集'}}</button>
+                <button class="primary start" :disabled="busy||collectionRunning||!collectionTime" :title="!collectionTime?'请先选择采集时间':primaryAction==='resume'?resumeGuidance:primaryAction==='reset'?'按当前所选时间重新采集，历史任务保留':'按所选时间开始采集'" @click="start">② {{primaryLabel}}</button>
                 <button :class="['secondary',{'detail-highlight':detailHighlight}]" :disabled="!detailPlatforms.includes(selected)||!detailPending||busy||collectionRunning" :title="!detailPlatforms.includes(selected)?'此平台不支持独立提取订单详情':selected==='jd'?'通过京东官方导出补充收件信息，按本任务日期范围匹配':detailHighlight?'列表已采集完成，请提取详情':'提取尚未成功读取的官方订单详情'" @click="enrich">③ 提取订单详情<span v-if="detailPlatforms.includes(selected)&&detailPending"> · {{detailPending}}</span></button>
                 <button class="primary" :disabled="!records.length||busy||collectionRunning" title="导出本任务全部订单，表格筛选不改变导出范围" @click="exportFile">④ 导出文件 ↓</button>
                 <details class="export-options"><summary>导出设置 ▾</summary><div class="export-options-panel"><label class="inline-label">文件格式<select v-model="format"><option value="xlsx">Excel (.xlsx)</option><option value="csv">CSV (.csv)</option></select></label><label class="checkbox"><input v-model="images" type="checkbox" :disabled="format==='csv'">嵌入商品图片</label><button class="text-button" @click="choose">{{state?.outputDir?'更改保存目录':'选择保存目录'}} ↗</button><p :title="state?.outputDir">{{state?.outputDir||'首次导出时选择保存目录'}}</p></div></details>
               </div>
               <div class="collection-time-summary" :title="timeSummary">{{timeSummary}}</div>
-              <div v-if="task && (task.status==='running'||['paused','needs_login','failed'].includes(task.status)||(task.status==='partial'&&!listComplete))" class="collection-secondary-actions">
-                <button v-if="task.status==='running'" class="text-button" @click="action(()=>desk.pause(taskId))">暂停</button>
-                <button v-if="['paused','needs_login','failed'].includes(task.status)" class="text-button" :disabled="busy||collectionRunning" @click="action(()=>desk.resume(taskId))">继续采集</button>
-                <button v-if="task.status==='partial'&&!listComplete" class="text-button" :disabled="busy||collectionRunning" @click="action(()=>desk.retry(taskId))">重试采集</button>
-                <button v-if="task.status==='running'" class="text-button" @click="action(()=>desk.finish(taskId))">结束读取</button>
+              <div v-if="changedTime" class="collection-time-change" role="status">采集时间已更改，点击②按新时间开始，原任务进度保留。</div>
+              <div v-if="task?.status==='running'" class="collection-secondary-actions">
+                <button class="text-button" @click="action(()=>desk.pause(taskId))">暂停</button>
+                <button class="text-button" @click="action(()=>desk.finish(taskId))">结束读取</button>
               </div>
             </section><div class="button-row platform-actions"><button v-if="!pageOpen" class="secondary danger" :disabled="busy||!state||state.tasks.some(t=>t.status==='running')" :title="`清理 ${platform?.name} 的本机任务和订单记录，不删除已导出文件`" @click="clearPlatform">清理当前平台缓存</button><button class="secondary" @click="pageOpen?hidePage():openPage()" :disabled="busy">{{pageOpen?'返回导出台':platform?.mode==='proxy'?'打开平台页面':'登录 / 查看平台页'}}</button></div></div>
           <div v-if="pageOpen" class="browser-placeholder"><p v-if="selected==='alibaba'">1688 使用淘宝／阿里账号登录，出现淘宝登录页属于官方跳转。登录后会返回 1688，再点击右上角“返回导出台”。</p><p v-else>请在下方的官方平台页面完成登录。完成后点击右上角“返回导出台”。</p></div>
@@ -103,7 +107,7 @@ onUnmounted(()=>{off?.();offUpdate?.()})
               <details><summary>首次设置步骤与停止方式</summary><ol><li>开启辅助采集后，打开证书，在 Windows 中手动将其导入当前用户的受信任根证书。仅用于本机采集。</li><li>记下原来的代理设置，将手动代理临时设为 <code>127.0.0.1:17869</code>。当前程序尚不自动改动系统设置。</li><li>选择采集时间后点击“② 开始采集”，再打开对应微信小程序的订单列表并向下翻页。</li><li>结束后先恢复原来的系统代理设置，再停止辅助采集或退出软件。</li></ol><button class="text-button" @click="action(()=>desk.proxyStop(),'本机监听已停止，请确认系统代理已恢复。')">停止辅助采集</button></details>
             </section>
             <div v-if="detailHighlight" class="detail-prompt" role="status">{{selected==='jd'?'通过京东官方导出补充收件信息，自动按本任务日期范围匹配，可暂停后继续。':'列表已采集完成，请提取详情'}} <span>· {{detailPending}} 笔待提取</span></div>
-            <CollectionActivity v-if="task && activityVisible" :task="task" :pending-details="detailPending" />
+            <CollectionActivity v-if="task && activityVisible" :task="task" :pending-details="detailPending" :resume-guidance="resumeGuidance" />
             <details v-if="task?.plan" class="plan-inline">
               <summary><strong>采集进度 {{task.plan.segments.filter(s=>s.status==='completed').length}} / {{task.plan.segments.length}}</strong><span :title="task.message">{{task.message}}</span><span class="plan-expand">展开进度</span></summary>
               <div class="plan-segments" aria-label="采集计划进度"><div v-for="s in task.plan.segments" :key="s.id" :class="s.status"><strong>{{task.plan.granularity==='month'?s.from.slice(0,7):s.from}}</strong><small>{{s.from}} 至 {{s.to}}</small><span>{{segmentLabels[s.status]}} · {{s.count}} 笔</span></div></div>
@@ -142,7 +146,7 @@ onUnmounted(()=>{off?.();offUpdate?.()})
         <template v-else>
           <div class="page-title"><div><div class="eyebrow">GUIDE</div><h1>使用教程</h1><p>了解这个软件能做什么，以及如何导出你的订单。</p></div></div>
           <section class="settings-card"><h2>这个软件是做什么的</h2><p>电商平台采购订单导出，是在你自己的 Windows 电脑上运行的订单导出工具。它登录各电商平台的官方页面，读取你作为<strong>买家</strong>的历史订单，整理成表格导出到本地（Excel 或 CSV，可含商品图片），方便对账、归档和留底。</p><p>支持 <strong>9 个平台</strong>：淘宝/天猫、1688、拼多多、京东、闲鱼（软件内登录官方页面），以及得物、快手、饿了么、美团（微信小程序辅助采集）。</p><p>订单和登录状态<strong>只保存在这台电脑</strong>，不会上传到任何服务器。</p></section>
-          <section class="settings-card"><h2>快速上手（4 步）</h2><p>先选择左侧平台，并在官方平台页面完成登录。</p><ol class="guide-steps"><li><b>① 选择采集时间</b>——选择年份、月份或下单日期，确认后返回；可选多个不连续月份。</li><li><b>② 开始采集</b>——点击后读取订单，执行日志与采集进度显示实时状态。列表完成后按钮变为“② 重置采集”，可按所选时间新建采集任务，保留历史结果。</li><li><b>③ 提取订单详情</b>——支持的平台可补充尚未读取的官方详情。</li><li><b>④ 导出文件</b>——选择格式（Excel/CSV）和保存目录，保存当前任务全部订单。清理当前平台缓存后，第二步恢复“开始采集”。</li></ol></section>
+          <section class="settings-card"><h2>快速上手（4 步）</h2><p>先选择左侧平台，并在官方平台页面完成登录。</p><ol class="guide-steps"><li><b>① 选择采集时间</b>——选择年份、月份或下单日期，确认后返回；可选多个不连续月份。</li><li><b>② 开始采集</b>——点击后读取订单，执行日志与采集进度显示实时状态。中断后点击“② 继续采集”从断点继续，保留已有订单；更改时间则新建任务。列表完成后按钮变为“② 重置采集”，可按所选时间新建采集任务，保留历史结果。</li><li><b>③ 提取订单详情</b>——支持的平台可补充尚未读取的官方详情。</li><li><b>④ 导出文件</b>——选择格式（Excel/CSV）和保存目录，保存当前任务全部订单。清理当前平台缓存后，第二步恢复“开始采集”。</li></ol></section>
           <section class="settings-card"><h2>小程序平台（得物 / 快手 / 饿了么 / 美团）</h2><p>这几个平台需先完成一次性的证书和代理设置（软件内有详细步骤），再在微信小程序里打开对应平台的订单列表并向下翻页，软件会自动读取。</p></section>
           <section class="settings-card"><h2>常见提示</h2><ul class="guide-tips"><li>历史订单要选对日期范围；日期内没有订单会明确提示，改日期重新采集即可。</li><li>导出文件按平台分目录并带时间戳，不会覆盖旧文件。</li><li>采集结果随时可在「导出任务」里重新打开、继续或重新导出。</li><li>软件会在后台检查更新，发现新版在顶部提示；数据保存位置见「保存与设置」。</li></ul></section>
         </template>

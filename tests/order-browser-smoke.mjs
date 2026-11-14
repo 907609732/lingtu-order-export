@@ -33,7 +33,7 @@ try{
  async function waitTask(){let s;for(let i=0;i<200;i++){s=await p.evaluate(()=>window.desk.state());if(s.tasks.find(t=>t.id==='details-case').status!=='running')return s;await new Promise(r=>setTimeout(r,100))}throw Error('detail task timeout')}
  let s=await waitTask();assert.equal(s.tasks.find(t=>t.id==='details-case').status,'needs_login')
  let items=await p.evaluate(()=>window.desk.orders('details-case'));assert.equal(items[0].receiver,'PRIVATE_RECEIVER');assert.equal(items[0].address,'PRIVATE_ADDRESS');assert.equal(items[0].phone,'13800001111');assert.equal(items[0].logistics,'PRIVATE_COMPANY');assert.equal(items[0].tracking,'PRIVATE_TRACKING');assert.equal(items[0].extra['物流状态'],'已签收 合成签收描述');assert.notEqual(items[2].receiver,'PRIVATE_RECEIVER')
- await app.evaluate(()=>{globalThis.blockDetail=false});await p.getByRole('button',{name:'继续采集',exact:true}).click();s=await waitTask();assert.equal(s.tasks.find(t=>t.id==='details-case').status,'partial')
+ await app.evaluate(()=>{globalThis.blockDetail=false});await p.getByRole('button',{name:'② 继续采集',exact:true}).click();s=await waitTask();assert.equal(s.tasks.find(t=>t.id==='details-case').status,'partial')
  items=await p.evaluate(()=>window.desk.orders('details-case'));assert.equal(items.length,3);assert.ok(items.every(o=>o.receiver==='PRIVATE_RECEIVER'&&o.paidAt==='2026-03-28 12:15:00'))
  const logs=await p.evaluate(()=>window.desk.executionLogs('taobao'));assert.ok(!JSON.stringify(logs).includes('PRIVATE_'))
  await p.getByLabel('查看历史采集任务').selectOption('browser-case');await p.locator('.order-id').first().click();await p.locator('.order-detail').first().scrollIntoViewIfNeeded();await p.screenshot({path:join(root,'expanded.png')})
