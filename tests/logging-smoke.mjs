@@ -19,6 +19,10 @@ async function launch(){
 }
 try{
   let page=await launch()
+  const logCard=page.locator('.settings-card').filter({has:page.getByRole('heading',{name:'日志设置',exact:true})})
+  await expect(logCard.getByRole('switch')).toHaveCount(2)
+  await expect(page.getByRole('heading',{name:'导出文件夹',exact:true})).toHaveCount(0)
+  await expect(page.getByRole('heading',{name:'当前验证状态',exact:true})).toHaveCount(0)
   let toggle=page.getByRole('switch',{name:'问题排查日志'})
   await expect(toggle).toHaveAttribute('aria-checked','false')
   assert.ok(!(await readdir(root)).includes('logs'),'default off must not create logs')

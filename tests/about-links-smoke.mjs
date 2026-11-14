@@ -21,6 +21,6 @@ try{
     'https://buyer.lttlt.top/',
     'https://github.com/907609732/lingtu-order-export'
   ])
-  await expect(page.getByRole('button',{name:'检查更新',exact:true})).toBeEnabled()
-  console.log('PASS: About buttons route through real preload/IPC to distinct official URLs; update button retained; isolated data used.')
+  await expect(page.getByRole('button',{name:'检查更新',exact:true})).toBeDisabled()
+  console.log('PASS: About buttons route through real preload/IPC to distinct official URLs; development update control safely disabled; isolated data used.')
 }finally{await app?.close()}

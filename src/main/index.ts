@@ -12,17 +12,21 @@ import { OrderProxy } from './proxy'
 import { Diagnostics } from './diagnostics'
 import { ExecutionLog } from './execution-log'
 import { ExecutionProgress } from './execution-progress'
-import type { ExportInput,PlatformId,StartInput,UpdateInfo } from '../shared/types'
+import type { ExportInput,PlatformId,StartInput } from '../shared/types'
 import { WEBSITE_URL,REPOSITORY_URL } from '../shared/config'
-import { checkLatest,compareVersions } from './updater'
+import { UpdateController } from './updater'
+import electronUpdater from 'electron-updater'
 import { reportLaunch } from './analytics'
 import {chooseUserData} from './user-data'
 const root=dirname(fileURLToPath(import.meta.url))
 app.setName('电商平台采购订单导出')
 if(process.env.ORDERDESK_TEST_DATA)app.setPath('userData',resolve(process.env.ORDERDESK_TEST_DATA))
 else app.setPath('userData',chooseUserData(app.getPath('appData')))
-let store:Store,collector:Collector,proxy:OrderProxy,win:BrowserWindow,diagnostics:Diagnostics,journal:ExecutionLog;let exporting=false
-let latestUpdate:UpdateInfo|null=null
+const hasInstanceLock=app.requestSingleInstanceLock()
+if(!hasInstanceLock)app.quit()
+let store:Store,collector:Collector,proxy:OrderProxy,win:BrowserWindow,diagnostics:Diagnostics,journal:ExecutionLog;let exporting=false;let proxyStarting=false
+app.on('second-instance',()=>{if(win&&!win.isDestroyed()){if(win.isMinimized())win.restore();win.show();win.focus()}})
+let updater:UpdateController
 let logNotification:ReturnType<typeof setTimeout>|undefined
 const executionChanged=()=>{if(logNotification)return;logNotification=setTimeout(()=>{logNotification=undefined;if(win&&!win.isDestroyed())win.webContents.send('desk:executionChanged')},100);logNotification.unref()}
 const change=()=>{if(win&&!win.isDestroyed())win.webContents.send('desk:changed')}
@@ -35,7 +39,7 @@ function bind(name:string,fn:(...args:any[])=>any){ipcMain.handle('desk:'+name,a
   catch(error){if(!['reportError','executionLogs'].includes(name)){const input=args[0];let platform=typeof input==='object'?input?.platform:input;try{if(typeof input==='string'&&!platforms.some(p=>p.id===input))platform=store.get(input).platform;else if(input?.taskId)platform=store.get(input.taskId).platform}catch{}diagnostics.event('ipc.failed',{operation:name,platform,durationMs:Date.now()-started},error)}throw error}
 })}
 function target(id:unknown):PlatformId{return platformById(String(id)).id}
-function idle(){if(collector.runs.size||exporting)throw new Error('请等待当前操作结束');if(store.tasks().some(t=>t.status==='running'))throw new Error('请先暂停当前采集任务')}
+function idle(){updater.assertCanStart();if(collector.runs.size||exporting)throw new Error('请等待当前操作结束');if(store.tasks().some(t=>t.status==='running'))throw new Error('请先暂停当前采集任务')}
 async function imageBytes(url:string):Promise<Buffer>{
   const u=new URL(url.startsWith('//')?'https:'+url:url);if(!['https:','http:'].includes(u.protocol)||!['alicdn.com','taobaocdn.com','360buyimg.com','jd.com','pddpic.com','yangkeduo.com','dewu.com','poizon.com','ecukwai.com','kwai.net','ksapisrv.com','meituan.net','dianping.com','ele.me','elemecdn.com'].some(d=>u.hostname===d||u.hostname.endsWith('.'+d)))throw new Error('图片地址不属于平台图片域名')
   const folder=join(app.getPath('userData'),'images');await mkdir(folder,{recursive:true});const file=join(folder,createHash('sha256').update(u.href).digest('hex')+'.png');try{return await readFile(file)}catch{}
@@ -46,6 +50,7 @@ async function imageBytes(url:string):Promise<Buffer>{
   const resized=image.resize({width:160}).toPNG();await writeFile(file,resized);return resized
 }
 app.whenReady().then(async()=>{
+  if(!hasInstanceLock)return
   diagnostics=new Diagnostics(app.getPath('userData'),app.getVersion())
   journal=new ExecutionLog(executionChanged);diagnostics.onEvent=journal.accept
   await mkdir(app.getPath('userData'),{recursive:true});store=new Store(join(app.getPath('userData'),'orders.sqlite'))
@@ -57,7 +62,10 @@ app.whenReady().then(async()=>{
   win.webContents.on('render-process-gone',(_e,d)=>diagnostics.event('renderer.gone',{reason:d.reason,exitCode:d.exitCode},undefined,'error'))
   win.webContents.on('preload-error',(_e,_path,error)=>diagnostics.event('renderer.preload_failed',{},error))
   collector=new Collector(win,store,change,diagnostics);proxy=new OrderProxy(join(app.getPath('userData'),'proxy-ca'),(p,b)=>collector.accept(p,b),diagnostics)
-  bind('state',()=>({platforms,tasks:store.tasks(),outputDir:store.setting('outputDir'),version:app.getVersion(),logging:diagnostics.state(),showExecutionLog:store.setting('showExecutionLog')!=='false',proxy:{running:proxy.running,port:proxy.port,certificate:proxy.certificate},update:latestUpdate}))
+  const {autoUpdater}=electronUpdater
+  autoUpdater.setFeedURL({provider:'github',owner:'907609732',repo:'lingtu-order-export'})
+  updater=new UpdateController(autoUpdater,{current:app.getVersion(),supported:app.isPackaged&&process.platform==='win32',busy:()=>!!(collector.runs.size||exporting||proxyStarting||proxy.running||store.tasks().some(t=>t.status==='running')),changed:()=>{if(win&&!win.isDestroyed())win.webContents.send('desk:updateAvailable')}})
+  bind('state',()=>({platforms,tasks:store.tasks(),outputDir:store.setting('outputDir'),version:app.getVersion(),logging:diagnostics.state(),showExecutionLog:store.setting('showExecutionLog')!=='false',proxy:{running:proxy.running,port:proxy.port,certificate:proxy.certificate},update:updater.state}))
   bind('executionLogs',(platform:PlatformId)=>journal.snapshot(target(platform)))
   bind('setExecutionLogVisible',(visible:unknown)=>{if(typeof visible!=='boolean')throw new Error('执行日志开关参数无效');store.setting('showExecutionLog',String(visible));change()})
   bind('setLogging',(enabled:unknown)=>{
@@ -82,7 +90,7 @@ app.whenReady().then(async()=>{
   bind('finish',(id:string)=>{collector.stop(id);store.update(id,{status:'partial',message:'已结束本次读取；仅代表已获取的记录，平台完整范围未自动验证'});taskAction(id,'finish');change()})
   bind('chooseDirectory',async()=>{collector.hide();const result=await dialog.showOpenDialog(win,{title:'选择订单导出目录',properties:['openDirectory','createDirectory'],defaultPath:store.setting('outputDir')||app.getPath('documents')});if(result.canceled)return store.setting('outputDir');store.setting('outputDir',result.filePaths[0]);change();return result.filePaths[0]})
   bind('export',async(input:ExportInput)=>{
-    if(exporting)throw new Error('正在生成文件，请等待本次导出结束');if(!['xlsx','csv'].includes(input.format))throw new Error('不支持的文件格式')
+    updater.assertCanStart();if(exporting)throw new Error('正在生成文件，请等待本次导出结束');if(!['xlsx','csv'].includes(input.format))throw new Error('不支持的文件格式')
     const directory=store.setting('outputDir');if(!directory)throw new Error('请先选择保存目录');const task=store.get(input.taskId),started=Date.now();exporting=true
     const progress=new ExecutionProgress(diagnostics,'export',{platform:task.platform,taskId:task.id})
     diagnostics.event('export.start',{platform:task.platform,taskId:task.id,count:task.count,format:input.format,images:!!input.images&&input.format==='xlsx'})
@@ -91,16 +99,21 @@ app.whenReady().then(async()=>{
   bind('openOutput',async()=>{const dir=store.setting('outputDir');if(dir)await shell.openPath(dir)})
   bind('openExport',(id:string)=>{const path=store.get(id).exportedPath;const dir=store.setting('outputDir');if(path&&dir&&resolve(path).startsWith(resolve(dir)+sep))shell.showItemInFolder(path)})
   bind('clear',async(id:PlatformId)=>{idle();target(id);collector.hide();const r=await dialog.showMessageBox(win,{type:'warning',title:'清理本机采集记录',message:`清理 ${platformById(id).name} 的采集缓存和任务记录？`,detail:'已经导出的文件和平台上的订单不会删除。此操作不能撤销。',buttons:['保留','清理缓存'],defaultId:0,cancelId:0});if(r.response===1){store.clear(id);change();return true}return false})
-  bind('proxyStart',async(id:PlatformId)=>{target(id);if(platformById(id).mode!=='proxy')throw new Error('此平台使用软件内登录');await proxy.start(id);change()})
+  bind('proxyStart',async(id:PlatformId)=>{updater.assertCanStart();target(id);if(platformById(id).mode!=='proxy')throw new Error('此平台使用软件内登录');proxyStarting=true;try{await proxy.start(id);change()}finally{proxyStarting=false}})
   bind('proxyStop',()=>{proxy.stop();change()})
   bind('certificate',async()=>{if(!proxy.running)throw new Error('请先开启辅助采集');await shell.openPath(proxy.certificate)})
   bind('proxySettings',()=>shell.openExternal('ms-settings:network-proxy'))
-  bind('checkUpdate',async()=>{const latest=await checkLatest();if(latest&&compareVersions(latest.latest,app.getVersion())>0){latestUpdate={...latest,current:app.getVersion()};if(win&&!win.isDestroyed())win.webContents.send('desk:updateAvailable',latestUpdate)}return latestUpdate})
-  bind('openUpdate',()=>{if(latestUpdate?.url)shell.openExternal(latestUpdate.url)})
+  bind('checkUpdate',()=>updater.check())
+  bind('downloadUpdate',()=>updater.download())
+  bind('cancelUpdate',()=>updater.cancel())
+  bind('installUpdate',()=>updater.install())
   bind('openWebsite',()=>{if(WEBSITE_URL)shell.openExternal(WEBSITE_URL)})
   bind('openRepository',()=>shell.openExternal(REPOSITORY_URL))
-  // 后台记录启动、上报日活、检查更新；均不影响正常使用，失败静默。
-  if(!process.env.ORDERDESK_TEST_DATA)void (async()=>{const installId=store.installId();store.logLaunch(app.getVersion());await reportLaunch(installId,app.getVersion());const latest=await checkLatest();if(latest&&compareVersions(latest.latest,app.getVersion())>0){latestUpdate={...latest,current:app.getVersion()};if(win&&!win.isDestroyed())win.webContents.send('desk:updateAvailable',latestUpdate)}})()
+  // 启动检查和统计独立，任一网络请求失败均不阻塞另一项。
+  if(!process.env.ORDERDESK_TEST_DATA){
+    void updater.check()
+    store.logLaunch(app.getVersion());void reportLaunch(store.installId(),app.getVersion()).catch(()=>{})
+  }
   win.once('ready-to-show',()=>win.show())
   if(process.env.ELECTRON_RENDERER_URL)await win.loadURL(process.env.ELECTRON_RENDERER_URL);else await win.loadFile(join(root,'../renderer/index.html'))
   win.show()
