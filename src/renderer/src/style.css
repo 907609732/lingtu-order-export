@@ -195,3 +195,15 @@ h2{font-size:13px;font-weight:600}
 .detail-prompt{font-size:11px;color:#1769b5;background:#edf5ff;border-radius:7px;padding:8px 12px;margin:0 0 8px}.detail-prompt span{color:#637b93}
 .plan-inline{display:flex;align-items:center;gap:12px;font-size:11px;color:var(--secondary);margin:0 0 8px;min-width:0}.plan-inline>span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.plan-inline button{white-space:nowrap}
 @media(max-width:1200px){.export-title .header-controls .form-row{flex-wrap:wrap}.export-title .header-controls .collection-actions{flex-wrap:wrap;justify-content:flex-end}}
+
+/* Four-step collection controls and their confirmed time selection. */
+.four-step-actions{justify-content:flex-start;flex-wrap:wrap;margin-left:0;gap:7px}
+.collection-time-summary{font-size:11px;color:var(--secondary);margin-top:8px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.collection-secondary-actions{display:flex;gap:14px;align-items:center;margin-top:6px;font-size:11px}
+.plan-inline{display:block;padding:9px 12px;border:1px solid #dceafb;border-radius:8px;background:#f5f9ff}
+.plan-inline>summary{display:flex;align-items:center;gap:12px;cursor:pointer;list-style:none;min-width:0}
+.plan-inline>summary>span:not(.plan-expand){flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.plan-inline .plan-expand{margin-left:auto;white-space:nowrap;color:var(--accent)}
+.plan-inline>.plan-segments{margin-top:10px}.plan-inline>summary strong{white-space:nowrap}
+.plan-date-range{display:flex;align-items:center;gap:12px;font-size:12px}.plan-date-range label{display:flex;align-items:center;gap:8px}.plan-date-range input{height:32px;padding:5px 8px;width:150px}
+@media(max-width:1200px){.export-title .header-controls .four-step-actions{justify-content:flex-start;gap:6px}}

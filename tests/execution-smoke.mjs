@@ -20,14 +20,15 @@ try{
   const live=page.getByRole('log',{name:'实时执行日志',includeHidden:true})
   await expect(live).toContainText('程序已启动')
   assert.equal((await page.evaluate(()=>window.desk.state())).logging.enabled,false)
-  await app.evaluate(({session},{first,second})=>{
+  await app.evaluate(async({session},{first,second})=>{
+    await session.fromPartition('persist:orderdesk-taobao').cookies.set({url:'https://buyertrade.taobao.com',name:'unb',value:'synthetic-execution-account'})
     session.fromPartition('persist:orderdesk-taobao').protocol.handle('https',()=>new Response(`<html><body>合成平台页面<script>
       window.lib={mtop:{request:async req=>{const page=req.data.page;if(page===1)await new Promise(resolve=>window.releasePage=resolve);return page===1?${JSON.stringify(first)}:${JSON.stringify(second)}}}};
     </script></body></html>`,{headers:{'content-type':'text/html;charset=utf-8'}}))
   },{first:response(1),second:response(2)})
   await page.evaluate(()=>window.desk.login('taobao'));await page.evaluate(()=>window.desk.hidePage())
-  await page.getByLabel('开始日期').fill('2026-10-01');await page.getByLabel('结束日期').fill('2026-10-02')
-  await page.getByRole('button',{name:'开始采集'}).click()
+  await page.getByRole('button',{name:'① 选择采集时间',exact:true}).click();await page.getByRole('button',{name:'按天',exact:true}).click();await page.getByLabel('开始日期').fill('2026-10-01');await page.getByLabel('结束日期').fill('2026-10-02');await page.getByRole('button',{name:'确认采集时间',exact:true}).click()
+  await page.getByRole('button',{name:/^② (?:开始|重置)采集$/}).click()
   await expect(live).toContainText('正在读取2026 年10 月第 1 页订单')
   await expect(live).toBeVisible()
   assert.equal((await page.evaluate(()=>window.desk.state())).tasks[0].status,'running')
@@ -57,7 +58,7 @@ try{
   await page.screenshot({path:join(root,'live-complete.png')})
   // A real backend failure reaches the visible feed, still with file logging off.
   await app.evaluate(async({webContents})=>{const platform=webContents.getAllWebContents().find(w=>w.getURL().startsWith('https://'));await platform.executeJavaScript("window.lib.mtop.request=async()=>{throw {ret:['FAIL_SYS_SESSION_EXPIRED::PRIVATE_TOKEN']}}; void 0")})
-  await page.getByRole('button',{name:'开始采集'}).click()
+  await page.getByRole('button',{name:/^② (?:开始|重置)采集$/}).click()
   await expect(live).toContainText('采集暂时中断')
   await expect(live).toContainText('需要登录或完成平台验证')
   await expect(live).not.toContainText('PRIVATE_TOKEN')

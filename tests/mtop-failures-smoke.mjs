@@ -36,7 +36,7 @@ try{
   if(mode==='success'){
    assert.equal(done.count,0);assert.ok(own.includes('没有订单'));assert.ok(!own.includes('可导出文件'));assert.ok(!done.message.includes('补全'));
    await page.reload();await expect(page.getByRole('heading',{name:'该日期范围内没有订单'})).toBeVisible()
-   await expect(page.getByLabel('开始日期')).toHaveValue(done.from);await expect(page.getByLabel('结束日期')).toHaveValue(done.to)
+   await expect(page.locator('.collection-time-summary')).toContainText(done.from+' 至 '+done.to)
    await expect(page.locator('.empty-state')).toContainText('请选择订单实际的下单日期')
    await expect(page.locator('.empty-state p')).not.toContainText('登录')
    await expect(page.getByRole('button',{name:'导出文件'})).toBeDisabled()

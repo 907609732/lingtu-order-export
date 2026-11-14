@@ -4,43 +4,44 @@ import {ElDialog,ElDatePicker,ElConfigProvider} from 'element-plus'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import 'element-plus/es/components/dialog/style/css'
 import 'element-plus/es/components/date-picker/style/css'
-import type {PlanInput,Task,DateSegment} from '../../shared/types'
+import type {StartInput,DateSegment} from '../../shared/types'
 import {dateSegments} from '../../core/extraction-plan'
-const props=defineProps<{modelValue:boolean;from:string;to:string;task?:Task;busy:boolean;platformName:string}>()
-const emit=defineEmits<{ 'update:modelValue':[value:boolean]; start:[input:{from:string;to:string;plan:PlanInput}]; pause:[]; resume:[] }>()
-const granularity=ref<'month'|'day'>('month'),range=ref<[string,string]>([props.from,props.to]),selected=ref<string[]>([]),editing=ref(true)
+import {checkRange} from '../../core/values'
+type CollectionTime=Omit<StartInput,'platform'>
+const props=defineProps<{modelValue:boolean;from:string;to:string;selection?:CollectionTime;allowPlan:boolean;busy:boolean;platformName:string}>()
+const emit=defineEmits<{ 'update:modelValue':[value:boolean]; confirm:[input:CollectionTime] }>()
+const granularity=ref<'month'|'day'>('month'),range=ref<[string,string]>([props.from,props.to]),selected=ref<string[]>([])
 const year=ref(props.to.slice(0,4))
 const activeRange=computed<[string,string]>(()=>granularity.value==='month'?[year.value+'-01-01',year.value+'-12-31']:range.value)
 const key=(s:DateSegment)=>s.from+':'+s.to
-const candidates=computed(()=>{try{return dateSegments(activeRange.value?.[0],activeRange.value?.[1],granularity.value)}catch{return []}})
-const rangeError=computed(()=>{try{dateSegments(activeRange.value?.[0],activeRange.value?.[1],granularity.value);return ''}catch(e){return e instanceof Error?e.message:'请选择日期范围'}})
-const statuses={pending:'待提取',running:'提取中',completed:'列表已完成',paused:'已暂停',needs_attention:'需要处理'}
-const completed=computed(()=>props.task?.plan?.segments.filter(s=>s.status==='completed').length||0)
-watch(candidates,items=>{selected.value=granularity.value==='month'?[]:items.map(key)})
-function newPlan(){editing.value=true;granularity.value='month';year.value=props.to.slice(0,4);range.value=[props.from,props.to];selected.value=[]}
-watch(()=>props.modelValue,open=>{if(open){newPlan();editing.value=!props.task?.plan}})
+const candidates=computed(()=>{try{return props.allowPlan?dateSegments(activeRange.value?.[0],activeRange.value?.[1],granularity.value):[]}catch{return []}})
+const rangeError=computed(()=>{try{if(props.allowPlan)dateSegments(activeRange.value?.[0],activeRange.value?.[1],granularity.value);else checkRange(activeRange.value?.[0],activeRange.value?.[1]);return ''}catch(e){return e instanceof Error?e.message:'请选择日期范围'}})
+watch(candidates,items=>{selected.value=granularity.value==='month'?[]:items.map(key)},{flush:'sync'})
+watch(()=>props.modelValue,open=>{if(open){
+ const input=props.selection
+ range.value=[input?.from||props.from,input?.to||props.to];year.value=(input?.to||props.to).slice(0,4)
+ const fullMonths=new Set(dateSegments(year.value+'-01-01',year.value+'-12-31','month').map(key))
+ const singleYear=!input?.plan||input.plan.segments.every(s=>fullMonths.has(key(s)))
+ granularity.value=props.allowPlan?(input?.plan&&singleYear?input.plan.granularity:input?'day':'month'):'day'
+ selected.value=input?.plan?candidates.value.filter(s=>input.plan!.segments.some(part=>s.from>=part.from&&s.to<=part.to)).map(key):granularity.value==='day'?candidates.value.map(key):[]
+}})
 function toggle(id:string){selected.value=selected.value.includes(id)?selected.value.filter(s=>s!==id):[...selected.value,id]}
-function start(){if(rangeError.value||!selected.value.length)return;emit('start',{from:activeRange.value[0],to:activeRange.value[1],plan:{granularity:granularity.value,segments:candidates.value.filter(s=>selected.value.includes(key(s)))}})}
+function confirm(){if(props.busy||rangeError.value||(props.allowPlan&&!selected.value.length))return;emit('confirm',{from:activeRange.value[0],to:activeRange.value[1],...(props.allowPlan?{plan:{granularity:granularity.value,segments:candidates.value.filter(s=>selected.value.includes(key(s)))}}:{})})}
 </script>
 <template>
- <ElConfigProvider :locale="zhCn"><ElDialog :model-value="modelValue" @update:model-value="emit('update:modelValue',$event)" :title="platformName+' · 提取计划'" width="820px" top="6vh" class="extraction-plan-dialog" :close-on-click-modal="false" append-to-body>
-  <template v-if="editing">
-   <p class="plan-note">按下单日期分批提取，所有结果合并到同一张订单表。遇到平台验证会暂停，请处理后继续。</p>
-   <div class="plan-granularity"><button :class="{selected:granularity==='month'}" @click="granularity='month'">按月</button><button :class="{selected:granularity==='day'}" @click="granularity='day'">按天</button></div>
-   <div v-if="granularity==='month'" class="plan-year"><label for="plan-year">年份</label><ElDatePicker id="plan-year" v-model="year" type="year" value-format="YYYY" format="YYYY 年" placeholder="选择年份" :clearable="false" /><span>请选择要提取的月份，可多选</span></div>
-   <ElDatePicker v-else v-model="range" type="daterange" value-format="YYYY-MM-DD" format="YYYY-MM-DD" start-placeholder="开始日期" end-placeholder="结束日期" range-separator="至" :clearable="false" />
+ <ElConfigProvider :locale="zhCn"><ElDialog :model-value="modelValue" @update:model-value="emit('update:modelValue',$event)" :title="platformName+' · 选择采集时间'" width="820px" top="6vh" class="extraction-plan-dialog" :close-on-click-modal="false" append-to-body>
+   <p class="plan-note">按订单下单日期选择采集时间，确认后点击第二步开始采集。</p>
+   <div v-if="allowPlan" class="plan-granularity"><button :class="{selected:granularity==='month'}" @click="granularity='month'">按月</button><button :class="{selected:granularity==='day'}" @click="granularity='day'">按天</button></div>
+   <div v-if="granularity==='month'" class="plan-year"><label for="plan-year">年份</label><ElDatePicker id="plan-year" v-model="year" type="year" value-format="YYYY" format="YYYY 年" placeholder="选择年份" :clearable="false" /><span>请选择要采集的月份，可多选</span></div>
+   <div v-else class="plan-date-range"><label>开始日期<input v-model="range[0]" type="date" :max="range[1]"></label><span>至</span><label>结束日期<input v-model="range[1]" type="date" :min="range[0]"></label></div>
    <p v-if="rangeError" role="alert" class="plan-error">{{rangeError}}</p>
-   <div class="plan-selection-head"><span>已选择 {{selected.length}} / {{candidates.length}} {{granularity==='month'?'个月':'个日期段'}}</span><button class="text-button" @click="selected=candidates.map(key)">全选</button><button class="text-button" @click="selected=[]">清空选择</button></div>
-   <div class="plan-segments" :class="{'plan-months':granularity==='month'}" aria-label="选择提取日期段"><button v-for="s in candidates" :key="key(s)" :aria-pressed="selected.includes(key(s))" :class="{selected:selected.includes(key(s))}" @click="toggle(key(s))"><strong>{{granularity==='month'?Number(s.from.slice(5,7))+' 月':s.from}}</strong><small>{{s.from===s.to?s.from:s.from+' 至 '+s.to}}</small><span>{{selected.includes(key(s))?'待提取':'未选择'}}</span></button></div>
-   <p class="plan-note">{{granularity==='month'?'按完整月份提取，仅提取已选月份的订单。':'仅提取已选日期段的订单。'}}</p>
-  </template>
-  <template v-else-if="task?.plan">
-   <div class="plan-progress"><strong>列表进度 {{completed}} / {{task.plan.segments.length}}</strong><span>已采集 {{task.count}} 笔</span></div>
-   <p class="plan-note" role="status">{{task.message}}</p>
-   <div class="plan-segments" aria-label="提取计划进度"><div v-for="s in task.plan.segments" :key="s.id" :class="s.status"><strong>{{task.plan.granularity==='month'?s.from.slice(0,7):s.from}}</strong><small>{{s.from===s.to?s.from:s.from+' 至 '+s.to}}</small><span>{{statuses[s.status]}} · {{s.count}} 笔</span></div></div>
-   <p class="plan-note">绿色仅表示该日期段的列表已读完，不代表全部详情字段已获取。关闭软件后保留进度，重新打开可继续。</p>
-  </template>
-  <template #footer><div class="plan-footer"><button class="secondary" @click="emit('update:modelValue',false)">关闭</button><template v-if="editing"><button class="primary" :disabled="busy||!!rangeError||!selected.length" @click="start">{{granularity==='month'?'按所选月份开始':'按所选日期开始'}}</button></template><template v-else><button class="secondary" :disabled="busy||task?.status==='running'" @click="newPlan">新建计划</button><button v-if="task?.status==='running'" class="secondary" @click="emit('pause')">暂停计划</button><button v-else-if="task?.listOutcome!=='complete'" class="primary" :disabled="busy" @click="emit('resume')">继续计划</button></template></div></template>
+   <template v-if="allowPlan">
+    <div class="plan-selection-head"><span>已选择 {{selected.length}} / {{candidates.length}} {{granularity==='month'?'个月':'个日期段'}}</span><button class="text-button" @click="selected=candidates.map(key)">全选</button><button class="text-button" @click="selected=[]">清空选择</button></div>
+    <div class="plan-segments" :class="{'plan-months':granularity==='month'}" aria-label="选择采集日期段"><button v-for="s in candidates" :key="key(s)" :aria-pressed="selected.includes(key(s))" :class="{selected:selected.includes(key(s))}" @click="toggle(key(s))"><strong>{{granularity==='month'?Number(s.from.slice(5,7))+' 月':s.from}}</strong><small>{{s.from===s.to?s.from:s.from+' 至 '+s.to}}</small><span>{{selected.includes(key(s))?'已选择':'未选择'}}</span></button></div>
+    <p class="plan-note">{{granularity==='month'?'按完整月份采集，仅采集已选月份的订单。':'仅采集已选日期段的订单。'}}</p>
+   </template>
+   <p v-else class="plan-note">辅助采集按所选连续日期范围筛选订单。</p>
+  <template #footer><div class="plan-footer"><button class="secondary" @click="emit('update:modelValue',false)">取消</button><button class="primary" :disabled="busy||!!rangeError||(allowPlan&&!selected.length)" @click="confirm">确认采集时间</button></div></template>
  </ElDialog></ElConfigProvider>
 </template>
 <style>

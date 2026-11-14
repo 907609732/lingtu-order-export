@@ -1,5 +1,5 @@
 import {_electron as electron,expect} from '@playwright/test'
-import {mkdtemp,writeFile} from 'node:fs/promises'
+import {mkdtemp,writeFile,access} from 'node:fs/promises'
 import {resolve,join} from 'node:path'
 import {DatabaseSync} from 'node:sqlite'
 import assert from 'node:assert/strict'
@@ -14,8 +14,8 @@ try{
   const response=month=>{const id='90000000000000'+month.slice(-2);return {data:{data:{shop:{tag:'shopInfo',id,fields:{orderId:id,orderDetailUrl:'https://trade.taobao.com/trade/detail/trade_order_detail.htm?biz_order_id='+id,createTime:month+'-01 09:00:00',shopName:'合成商家'}},pay:{tag:'orderPayment',id,fields:{actualFee:{value:'12.30'}}},item:{tag:'orderItemInfo',id:id+'_1',fields:{orderId:id,item:{itemId:'1',title:'合成计划商品',quantity:1}}}},global:{pageControl:{hasMore:false}}}}}
   ses.protocol.handle('https',req=>{const u=new URL(req.url),id=u.searchParams.get('biz_order_id');return new Response(id?`<html><body>订单号：${id}<br>付款时间：2026-03-01 12:00:00<br>收货人：合成姓名<br>联系电话：13800000000<br>收货地址：合成地址</body></html>`:`<html><body>合成订单页<script>window.requestedMonths=[];const responses=${JSON.stringify({'2026-01':response('2026-01'),'2026-03':response('2026-03')})};window.lib={mtop:{request:async o=>{const m=JSON.parse(JSON.parse(o.data.condition).orderFilterExtParam).beginTime.slice(0,7);window.requestedMonths.push(m);return responses[m]}}}</script></body></html>`,{headers:{'content-type':'text/html;charset=utf-8'}})})
  })
- await p.getByRole('button',{name:'提取计划',exact:true}).click();await expect(p.getByRole('dialog')).toBeVisible()
- await expect(p.locator('.plan-segments>button')).toHaveCount(12);await expect(p.locator('.plan-selection-head')).toContainText('0 / 12 个月');await expect(p.getByRole('button',{name:'按所选月份开始'})).toBeDisabled()
+ await p.getByRole('button',{name:'① 选择采集时间',exact:true}).click();await expect(p.getByRole('dialog')).toBeVisible()
+ await p.getByRole('button',{name:'按月',exact:true}).click();await expect(p.locator('.plan-segments>button')).toHaveCount(12);await expect(p.locator('.plan-selection-head')).toContainText('0 / 12 个月');await expect(p.getByRole('button',{name:'确认采集时间'})).toBeDisabled()
  await p.getByRole('button',{name:'全选',exact:true}).click();await expect(p.locator('.plan-selection-head')).toContainText('12 / 12 个月')
  await p.getByLabel('年份',{exact:true}).fill('2024');await p.getByLabel('年份',{exact:true}).press('Enter');await p.getByLabel('年份',{exact:true}).press('Tab')
  await expect(p.locator('.plan-segments>button').nth(1)).toContainText('2024-02-29');await expect(p.locator('.plan-selection-head')).toContainText('0 / 12 个月')
@@ -26,18 +26,39 @@ try{
  await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(1120,740))
  await expect(p.locator('.plan-segments>button strong')).toHaveText(Array.from({length:12},(_,i)=>`${i+1} 月`))
  assert.equal(await p.locator('.plan-months').evaluate(el=>el.scrollHeight>el.clientHeight),false)
- const lastMonth=await p.locator('.plan-segments>button').last().boundingBox(),startButton=await p.getByRole('button',{name:'按所选月份开始'}).boundingBox();assert.ok(lastMonth&&startButton&&lastMonth.y+lastMonth.height<740&&startButton.y+startButton.height<740)
+ const lastMonth=await p.locator('.plan-segments>button').last().boundingBox(),startButton=await p.getByRole('button',{name:'确认采集时间'}).boundingBox();assert.ok(lastMonth&&startButton&&lastMonth.y+lastMonth.height<740&&startButton.y+startButton.height<740)
  await p.locator('.plan-segments>button').nth(0).click();await p.locator('.plan-segments>button').nth(2).click();await expect(p.locator('.plan-selection-head')).toContainText('2 / 12 个月')
- await p.screenshot({path:join(root,'selection.png')});await p.getByRole('button',{name:'按所选月份开始'}).click();await expect(p.getByRole('dialog')).toHaveCount(0)
+ await p.screenshot({path:join(root,'selection.png')});await p.getByRole('button',{name:'确认采集时间'}).click();await expect(p.getByRole('dialog')).toHaveCount(0)
+ assert.equal((await p.evaluate(()=>window.desk.state())).tasks.length,1,'confirming time must not create a task')
+ await expect(p.locator('.collection-time-summary')).toContainText('2026 年 · 1、3 月')
+ await expect(p.getByLabel('开始日期')).toHaveCount(0);await expect(p.getByRole('button',{name:'计划进度',exact:true})).toHaveCount(0)
+ await p.getByRole('button',{name:'① 选择采集时间',exact:true}).click();await expect(p.locator('.plan-segments>button.selected')).toHaveCount(2)
+ await p.locator('.plan-segments>button').nth(1).click();await p.getByRole('button',{name:'取消',exact:true}).last().click();await expect(p.locator('.collection-time-summary')).toContainText('1、3 月')
+ await p.locator('nav button').filter({hasText:'得物'}).click();await expect(p.getByRole('button',{name:'② 开始采集',exact:true})).toBeDisabled();await p.getByRole('button',{name:'① 选择采集时间',exact:true}).click()
+ await expect(p.getByRole('button',{name:'按月',exact:true})).toHaveCount(0);await expect(p.locator('.plan-segments>button')).toHaveCount(0);await p.getByLabel('开始日期').fill('2010-01-01');await p.getByLabel('结束日期').fill('2026-04-02');await p.getByRole('button',{name:'确认采集时间'}).click()
+ await expect(p.locator('.collection-time-summary')).toContainText('2010-01-01 至 2026-04-02');assert.equal((await p.evaluate(()=>window.desk.state())).tasks.length,1)
+ await p.locator('nav button').filter({hasText:'淘宝 / 天猫'}).click();await expect(p.locator('.collection-time-summary')).toContainText('1、3 月')
+ await p.getByRole('button',{name:'① 选择采集时间',exact:true}).click();await expect(p.locator('.plan-segments>button.selected')).toHaveCount(2);await p.getByRole('button',{name:'取消',exact:true}).last().click()
+ await expect(p.getByRole('button',{name:'② 开始采集',exact:true})).toBeEnabled();await p.getByRole('button',{name:'② 开始采集',exact:true}).click()
+ await expect(p.getByRole('button',{name:'① 选择采集时间',exact:true})).toBeDisabled();await expect(p.locator('.four-step-actions>.start')).toBeDisabled()
  await expect(p.locator('.plan-inline')).toContainText('2 / 2',{timeout:20000});await expect(p.locator('.detail-highlight')).toContainText('2');await expect(p.locator('.detail-prompt')).toContainText('列表已采集完成')
  const state=await p.evaluate(()=>window.desk.state()),task=state.tasks.find(t=>t.plan);assert.equal(task.count,2);assert.equal(task.listOutcome,'complete');assert.ok(task.plan.segments.every(s=>s.status==='completed'))
  const requests=await app.evaluate(async({webContents})=>webContents.getAllWebContents().find(w=>w.getURL().includes('list_bought_items')).executeJavaScript('window.requestedMonths'));assert.deepEqual(requests,['2026-03','2026-01'])
  await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(1120,740));await p.screenshot({path:join(root,'highlight-small.png')});assert.equal(await p.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false)
- await p.getByRole('button',{name:'计划进度',exact:true}).click();await expect(p.locator('.plan-segments .completed')).toHaveCount(2);await p.screenshot({path:join(root,'completed-plan.png')})
- await p.getByRole('button',{name:'新建计划',exact:true}).click();await expect(p.locator('.plan-segments>button')).toHaveCount(12);await expect(p.locator('.plan-selection-head')).toContainText('0 / 12 个月');await expect(p.getByRole('button',{name:'按所选月份开始'})).toBeDisabled();await p.getByRole('button',{name:'关闭',exact:true}).last().click()
- await p.getByRole('button',{name:/^提取订单详情/}).click();await expect.poll(async()=>{const rows=await p.evaluate(id=>window.desk.orders(id),task.id);return rows.filter(o=>o.detailReadAt).length},{timeout:25000}).toBe(2);await expect(p.getByRole('button',{name:/^提取订单详情/})).toBeDisabled();await expect(p.locator('.detail-highlight')).toHaveCount(0)
+ await expect(p.getByRole('button',{name:'② 重置采集',exact:true})).toBeEnabled();assert.equal(task.status,'partial')
+ await p.locator('.plan-inline>summary').click();await expect(p.locator('.plan-inline .completed')).toHaveCount(2);await p.screenshot({path:join(root,'completed-plan.png')});await p.locator('.plan-inline>summary').click()
+ await p.getByRole('button',{name:'① 选择采集时间',exact:true}).click();await expect(p.locator('.plan-segments>button')).toHaveCount(12);await expect(p.locator('.plan-selection-head')).toContainText('2 / 12 个月');await p.getByRole('button',{name:'取消',exact:true}).last().click()
+ await p.getByRole('button',{name:/^③ 提取订单详情/}).click();await expect.poll(async()=>{const rows=await p.evaluate(id=>window.desk.orders(id),task.id);return rows.filter(o=>o.detailReadAt).length},{timeout:25000}).toBe(2);await expect(p.getByRole('button',{name:/^③ 提取订单详情/})).toBeDisabled();await expect(p.locator('.detail-highlight')).toHaveCount(0)
  const orders=await p.evaluate(id=>window.desk.orders(id),task.id);assert.ok(orders.every(o=>o.detailReadAt));assert.ok(orders.every(o=>o.missing.includes('订单详情')),'Missing fields must not be fabricated as complete')
- await p.locator('.export-options summary').click();await p.getByLabel('嵌入商品图片').uncheck();await p.locator('.export-options summary').click();await p.getByRole('button',{name:/^导出文件/}).click();await expect(p.locator('.notice')).toContainText('已导出 2 笔订单')
+ await p.locator('.export-options summary').click();await p.getByLabel('嵌入商品图片').uncheck();await p.locator('.export-options summary').click();await p.getByRole('button',{name:/^④ 导出文件/}).click();await expect(p.locator('.notice')).toContainText('已导出 2 笔订单')
  await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(2560,1392));await p.screenshot({path:join(root,'wide.png')})
+ const exported=(await p.evaluate(()=>window.desk.state())).tasks.find(t=>t.id===task.id).exportedPath
+ await p.getByRole('button',{name:'② 重置采集',exact:true}).click();await expect(p.locator('.four-step-actions>.start')).toBeDisabled();await expect(p.getByRole('button',{name:'② 重置采集',exact:true})).toBeEnabled({timeout:20000})
+ const resetState=await p.evaluate(()=>window.desk.state()),newTask=resetState.tasks.find(t=>t.id!==task.id&&t.plan);assert.ok(newTask);assert.equal(newTask.count,2);assert.equal(resetState.tasks.length,3);assert.equal((await p.evaluate(id=>window.desk.orders(id),task.id)).length,2)
+ await app.evaluate(({dialog})=>{globalThis.clearResponse=0;dialog.showMessageBox=async()=>({response:globalThis.clearResponse,checkboxChecked:false})})
+ await p.getByRole('button',{name:'清理当前平台缓存',exact:true}).click();await expect(p.getByRole('button',{name:'② 重置采集',exact:true})).toBeEnabled();assert.equal((await p.evaluate(()=>window.desk.state())).tasks.length,3);await expect(p.locator('.collection-time-summary')).toContainText('1、3 月')
+ await app.evaluate(()=>{globalThis.clearResponse=1});await p.getByRole('button',{name:'清理当前平台缓存',exact:true}).click();await expect(p.getByRole('button',{name:'② 开始采集',exact:true})).toBeDisabled();await expect(p.locator('.collection-time-summary')).toContainText('尚未选择');assert.equal((await p.evaluate(()=>window.desk.state())).tasks.length,0)
+ assert.ok(exported);await access(exported)
+ await p.getByRole('button',{name:'① 选择采集时间',exact:true}).click();await expect(p.locator('.plan-selection-head')).toContainText('0 / 12 个月');await p.getByRole('button',{name:'取消',exact:true}).last().click()
  await writeFile(join(root,'result.json'),JSON.stringify({passed:true,count:2,queries:requests,highlight:true,detailReadTracking:true,mergedExport:true}));console.log(JSON.stringify({passed:true,root}))
 }finally{await app.close()}
