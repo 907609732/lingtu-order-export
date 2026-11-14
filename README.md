@@ -110,4 +110,10 @@ npm.cmd run dist   # Windows x64 NSIS 安装包，输出到 release/，不自动
 
 GitHub 为主仓库，Gitee 为代码镜像。代码修改从 GitHub 同步到 Gitee；安装包与版本说明以 GitHub Releases 为准。
 
+## 开源协议
+
+本项目原创代码采用 [MIT License](LICENSE)，允许商用、修改和再分发，使用或分发时须保留版权及许可证声明。软件按现状提供，不作担保。
+
+第三方依赖、平台名称与 Logo、引用素材遵循各自的许可证或权利声明；本项目的 MIT 协议不改变这些权利。
+
 BY 五成

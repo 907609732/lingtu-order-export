@@ -3,6 +3,7 @@
   "version": "0.1.21",
   "description": "电商平台采购订单导出",
   "author": "Local Order Desk",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "main": "out/main/index.js",
@@ -46,7 +47,8 @@
     "files": [
       "out/**",
       "build/icon.png",
-      "package.json"
+      "package.json",
+      "LICENSE"
     ],
     "asar": true,
     "win": {

@@ -110,4 +110,10 @@ Running the source does not validate live platform behavior. When reporting an i
 
 GitHub is the primary repository; Gitee is a source mirror. Changes are synchronized from GitHub to Gitee. Use GitHub Releases for installers and release notes.
 
+## License
+
+Original code in this project is licensed under the [MIT License](LICENSE). Commercial use, modification, and redistribution are permitted provided the copyright and license notices are retained. The software is provided without warranty.
+
+Third-party dependencies, platform names and logos, and referenced assets remain subject to their respective licenses or rights notices. This project’s MIT license does not change those rights.
+
 BY 五成
