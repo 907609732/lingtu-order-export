@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="website/assets/logo-icon.png" width="88" alt="电商平台采购订单导出" />
+<img src="../website/assets/logo-icon.png" width="88" alt="电商平台采购订单导出" />
 
 # E-commerce Purchase Order Export
 
@@ -8,7 +8,7 @@
 
 Collect buyer-side order history on Windows and turn it into Excel / CSV.
 
-[简体中文](README.md) · **English**
+[简体中文](../README.md) · **English**
 
 [![Release](https://img.shields.io/github/v/release/907609732/lingtu-order-export?color=0071e3&label=Release)](https://github.com/907609732/lingtu-order-export/releases/latest)
 [![Windows build](https://github.com/907609732/lingtu-order-export/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/907609732/lingtu-order-export/actions/workflows/build.yml)
@@ -24,7 +24,7 @@ Collect buyer-side order history on Windows and turn it into Excel / CSV.
 
 ## Product preview
 
-![Order collection and export](docs/screenshots/01-export.png)
+![Order collection and export](screenshots/01-export.png)
 
 <p align="center"><sub>Synthetic demonstration data from an earlier version; some labels differ from the current release.</sub></p>
 
@@ -76,7 +76,7 @@ After assisted Mini Program collection, restore your original proxy settings as 
 
 | Order details and filtering | Task history |
 | --- | --- |
-| ![Order table](docs/screenshots/05-order-table.png) | ![Task history](docs/screenshots/04-history.png) |
+| ![Order table](screenshots/05-order-table.png) | ![Task history](screenshots/04-history.png) |
 
 ## Data and network connections
 
@@ -112,7 +112,7 @@ GitHub is the primary repository; Gitee is a source mirror. Changes are synchron
 
 ## License
 
-Original code in this project is licensed under the [MIT License](LICENSE). Commercial use, modification, and redistribution are permitted provided the copyright and license notices are retained. The software is provided without warranty.
+Original code in this project is licensed under the [MIT License](../LICENSE). Commercial use, modification, and redistribution are permitted provided the copyright and license notices are retained. The software is provided without warranty.
 
 Third-party dependencies, platform names and logos, and referenced assets remain subject to their respective licenses or rights notices. This project’s MIT license does not change those rights.
 

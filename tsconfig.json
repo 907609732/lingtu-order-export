@@ -11,5 +11,5 @@
     "types": ["node"],
     "noEmit": true
   },
-  "include": ["src/**/*.ts", "src/**/*.vue", "electron.vite.config.ts", "tests/**/*.ts"]
+  "include": ["src/**/*.ts", "src/**/*.vue", "build/config/*.ts", "tests/**/*.ts"]
 }
