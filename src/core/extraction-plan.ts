@@ -31,3 +31,11 @@ export function createPlan(platform:PlatformId,from:string,to:string,input:PlanI
 export function acceptsPlanDate(plan:ExtractionPlan|undefined,date:string):boolean{return !plan||plan.segments.some(s=>inRange(date,s.from,s.to))}
 export function pendingDetails(orders:Order[]):Order[]{return orders.filter(o=>!o.detailReadAt&&o.detailState!=='complete'&&!o.extra['详情读取状态'])}
 export function shouldHighlightDetails(task:Task|undefined,orders:Order[]):boolean{return !!task&&detailPlatforms.includes(task.platform)&&task.status!=='running'&&task.status!=='needs_login'&&task.listOutcome==='complete'&&(!task.plan||task.plan.segments.every(s=>s.status==='completed'))&&pendingDetails(orders).length>0}
+
+// Completion requires evidence for the selected list scope and every stored detail.
+// Call only after a successful run, never from error/pause handlers.
+export function collectionComplete(task:Task,orders:Order[]):boolean{
+  return task.mode!=='official-export'&&task.listOutcome==='complete'&&task.count===orders.length&&
+    (!task.plan||(task.plan.segments.length>0&&task.plan.buckets.length>0&&task.plan.segments.every(s=>s.status==='completed')&&task.plan.buckets.every(b=>b.status==='completed')))&&
+    orders.every(o=>(!!o.detailReadAt||o.detailState==='complete')&&o.missing.length===0)
+}

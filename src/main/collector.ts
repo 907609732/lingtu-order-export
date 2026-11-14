@@ -3,7 +3,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { createHash } from 'node:crypto'
 import type { CollectionMode, Order, PlatformId, Task } from '../shared/types'
 import { allowedHost, isOrderResponse, platformById } from '../shared/platforms'
-import {pendingDetails} from '../core/extraction-plan'
+import {pendingDetails,collectionComplete} from '../core/extraction-plan'
 import { Store } from '../core/store'
 import { dateText, moneyFen } from '../core/values'
 import { mergeXianyuDetail, normalizePayload, parsePayload } from '../core/normalize'
@@ -67,6 +67,10 @@ export class Collector {
   private async navigateDetail(view:WebContentsView,url:string){
     await Promise.race([view.webContents.loadURL(url).catch(error=>{if(error?.errno!==-3&&error?.code!=='ERR_ABORTED')throw new CollectionError('network')}),delay(20000).then(()=>{throw new CollectionError('timeout')})])
   }
+  private finishCollection(id:string,patch:Partial<Task>){
+    const task={...this.store.get(id),...patch}
+    this.store.update(id,collectionComplete(task,this.store.orders(id))?{...patch,status:'completed',message:'所选列表范围和订单详情已提取完成'}:patch)
+  }
   async enrichDetails(task:Task):Promise<void>{
     if(task.mode==='official-export')throw new Error('官方报表模式不使用逐单详情采集')
     if(task.platform==='taobao')return this.enrichTaobao(task)
@@ -84,7 +88,7 @@ export class Collector {
       else if(task.platform==='xianyu')await this.xianyuDetails(task,view)
       else if(task.platform==='alibaba')await this.alibabaDetails(task,view)
       else await this.jdDetails(task,view)
-      if(!this.stopped.has(task.id)&&!(task.platform==='jd'&&this.store.get(task.id).jdDetailExport)){const remaining=pendingDetails(this.store.orders(task.id)).length;this.store.update(task.id,{status:'partial',message:`${name}详情读取结束，${remaining?`还有 ${remaining} 笔未成功读取，可再次提取`:'已处理所有订单'}；未提供字段仍保留缺项`});this.changed()}
+      if(!this.stopped.has(task.id)&&!(task.platform==='jd'&&this.store.get(task.id).jdDetailExport)){const remaining=pendingDetails(this.store.orders(task.id)).length;this.finishCollection(task.id,{status:'partial',message:`${name}详情读取结束，${remaining?`还有 ${remaining} 笔未成功读取，可再次提取`:'已处理所有订单'}；未提供字段仍保留缺项`});this.changed()}
     }catch(error){interrupted=true;this.diagnostics.event('collector.failed',{platform:task.platform,taskId:task.id},error);if(!this.stopped.has(task.id))this.store.update(task.id,{status:error instanceof CollectionError&&error.category==='login_or_verification'?'needs_login':'partial',message:error instanceof CollectionError||error instanceof JdExportError?error.message:'详情读取暂时中断，已保留结果，可继续提取'})}
     finally{this.runs.delete(task.id);if(this.active===task.id)this.active=undefined;this.progress.get(task.id)?.close();this.progress.delete(task.id);const latest=this.store.get(task.id);this.diagnostics.event('collector.end',{platform:task.platform,taskId:task.id,status:latest.status,count:latest.count,interrupted,durationMs:Date.now()-started});this.changed()}
   }
@@ -122,7 +126,7 @@ export class Collector {
         }
         if(i+1<orders.length)await delay(900)
       }
-      if(!this.stopped.has(task.id))this.store.update(task.id,{status:'partial',message:`详情读取结束：${read} 笔取得可见字段${failed?`，${failed} 笔暂未识别`:''}；未获取字段仍待核对，已有结果可导出`})
+      if(!this.stopped.has(task.id))this.finishCollection(task.id,{status:'partial',message:`详情读取结束：${read} 笔取得可见字段${failed?`，${failed} 笔暂未识别`:''}；未获取字段仍待核对，已有结果可导出`})
     }catch(error){interrupted=true;this.diagnostics.event('collector.failed',{platform:'taobao',taskId:task.id},error);if(!this.stopped.has(task.id))this.store.update(task.id,{status:error instanceof CollectionError&&error.category==='login_or_verification'?'needs_login':'partial',message:error instanceof CollectionError?error.message:'详情读取暂时中断，已有订单已保留，请重试'})}
     finally{this.runs.delete(task.id);if(this.active===task.id)this.active=undefined;this.progress.get(task.id)?.close();this.progress.delete(task.id);const latest=this.store.get(task.id);this.diagnostics.event('collector.end',{platform:'taobao',taskId:task.id,status:latest.status,count:latest.count,interrupted,durationMs:Date.now()-started});this.changed()}
   }
@@ -264,11 +268,11 @@ export class Collector {
       this.store.update(task.id,{status:'running',listOutcome:'pending'});this.changed()
       if(current.plan!.buckets.some(b=>b.status!=='completed'))await delay(task.platform==='alibaba'?8000:1600)
     }
-    if(!this.stopped.has(task.id)){const count=this.store.get(task.id).count;this.store.update(task.id,{listOutcome:'complete',cursor:'',status:count?'partial':'completed',message:count?'提取计划的列表已全部读取，已有订单可导出；详情缺项仍待核对':'提取计划已全部查完，所选日期没有订单'});this.changed()}
+    if(!this.stopped.has(task.id)){const count=this.store.get(task.id).count;this.finishCollection(task.id,{listOutcome:'complete',cursor:'',status:count?'partial':'completed',message:count?'提取计划的列表已全部读取，已有订单可导出；详情缺项仍待核对':'提取计划已全部查完，所选日期没有订单'});this.changed()}
   }
   async runXianyu(task:Task,view:WebContentsView){
     let cursor:{page:number;offset?:string;details?:boolean}={page:1};if(task.cursor)try{cursor=JSON.parse(task.cursor)}catch{}
-    const finish=async()=>{await this.xianyuDetails(task,view);if(!this.stopped.has(task.id)){const missing=this.store.orders(task.id).some(o=>o.missing.length);this.store.update(task.id,{listOutcome:'complete',status:missing?'partial':'completed',message:missing?'订单列表已读完，部分详情需重试':'所选日期范围读取完成'});this.changed()}}
+    const finish=async()=>{await this.xianyuDetails(task,view);if(!this.stopped.has(task.id)){this.finishCollection(task.id,{listOutcome:'complete',status:'partial',message:'订单列表已读完，部分详情需重试'});this.changed()}}
     if(cursor.details){await finish();return}
     for(let page=cursor.page,reads=0;reads<500&&!this.stopped.has(task.id);page++,reads++){
       this.stage(task,{phase:'page',page})
@@ -375,7 +379,7 @@ export class Collector {
   async runPdd(task:Task,view:WebContentsView){
     let offset='0',details=false
     if(task.cursor)try{const c=JSON.parse(task.cursor);if(c.kind==='pdd'&&typeof c.offset==='string'){offset=c.offset;details=c.details===true}}catch{}
-    const finish=async()=>{await this.pddDetails(task,view);if(!this.stopped.has(task.id)){this.store.update(task.id,{listOutcome:'complete',status:'partial',message:'拼多多列表和详情已处理；可导出结果及缺项清单，平台完整范围仍需核对'});this.changed()}}
+    const finish=async()=>{await this.pddDetails(task,view);if(!this.stopped.has(task.id)){this.finishCollection(task.id,{listOutcome:'complete',status:'partial',message:'拼多多列表和详情已处理；可导出结果及缺项清单，平台完整范围仍需核对'});this.changed()}}
     if(details){await finish();return}
     const seen=new Set<string>()
     for(let read=0;read<1000&&!this.stopped.has(task.id);read++){

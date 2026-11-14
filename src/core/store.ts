@@ -3,7 +3,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { randomUUID } from 'node:crypto'
 import type { Order, PlatformId, StartInput, Task } from '../shared/types'
 import { checkRange, inRange } from './values'
-import {createPlan,acceptsPlanDate} from './extraction-plan'
+import {createPlan,acceptsPlanDate,collectionComplete} from './extraction-plan'
 import { mergeOrders } from './merge'
 export class Store {
   db: DatabaseSync
@@ -15,6 +15,9 @@ export class Store {
       CREATE TABLE IF NOT EXISTS task_orders(task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, order_id TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(task_id,order_id));
       CREATE TABLE IF NOT EXISTS launches(date TEXT NOT NULL, version TEXT NOT NULL, ts TEXT NOT NULL);`)
     for (const t of this.tasks()) if (t.status==='running') this.update(t.id,{status:'paused',plan:t.plan?{...t.plan,segments:t.plan.segments.map(s=>s.status==='running'?{...s,status:'paused'}:s),buckets:t.plan.buckets.map(b=>b.status==='running'?{...b,status:'paused',cursor:t.cursor}:b)}:undefined,message:'上次采集已中断，可继续采集'})
+    // Repair only old successful endings; interrupted, paused and official tasks stay untouched.
+    // This runs at open, not on every renderer state poll.
+    for(const t of this.tasks()) if(t.status==='partial'&&t.count>0&&t.mode!=='official-export'&&t.listOutcome==='complete'&&/详情读取结束|详情读取结束：|列表和详情已处理|提取计划的列表已全部读取|订单列表已读完/.test(t.message)&&!/中断|失败|登录|上限/.test(t.message)&&collectionComplete(t,this.orders(t.id))) this.update(t.id,{status:'completed',message:'所选列表范围和订单详情已提取完成'})
   }
   setting(key: string, value?: string): string { if(value!==undefined) this.db.prepare('INSERT INTO settings VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key,value); return String((this.db.prepare('SELECT value FROM settings WHERE key=?').get(key) as any)?.value || '') }
   installId(): string { let id = this.setting('installId'); if (!id) { id = randomUUID(); this.setting('installId', id) } return id }
