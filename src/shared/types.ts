@@ -29,8 +29,7 @@ export interface StartInput { platform: PlatformId; from: string; to: string; pl
 export interface ExportInput { taskId: string; format: 'xlsx' | 'csv'; images: boolean }
 export interface LoggingState { enabled: boolean; directory: string; error: string }
 export interface ExecutionEntry { id: number; time: string; level: 'info'|'success'|'warning'|'error'; message: string; platform?: PlatformId; taskId?: string }
-export interface UpdateInfo { latest: string; current: string; name: string; url: string }
-export interface AppState { platforms: Platform[]; tasks: Task[]; outputDir: string; version: string; logging: LoggingState; showExecutionLog: boolean; proxy: { running: boolean; port: number; certificate: string }; update: UpdateInfo | null }
+export interface AppState { platforms: Platform[]; tasks: Task[]; outputDir: string; version: string; logging: LoggingState; showExecutionLog: boolean; proxy: { running: boolean; port: number; certificate: string }; update: UpdateState }
 export interface DeskAPI {
   state(): Promise<AppState>; orders(taskId: string): Promise<Order[]>; start(input: StartInput): Promise<Task>
   login(platform: PlatformId): Promise<void>; pause(id: string): Promise<void>; resume(id: string): Promise<void>; finish(id: string): Promise<void>
@@ -43,6 +42,10 @@ export interface DeskAPI {
   reportError(origin: 'window' | 'promise' | 'vue', error: { name: string; message: string; stack: string }): Promise<void>
   executionLogs(platform: PlatformId): Promise<ExecutionEntry[]>; setExecutionLogVisible(visible: boolean): Promise<void>
   onExecutionLog(callback: () => void): () => void
-  checkUpdate(): Promise<UpdateInfo | null>; openUpdate(): Promise<void>; openWebsite(): Promise<void>; openRepository(): Promise<void>
+  checkUpdate(): Promise<void>; downloadUpdate():Promise<void>; cancelUpdate():Promise<void>; installUpdate():Promise<void>; openWebsite(): Promise<void>; openRepository(): Promise<void>
   onUpdate(callback: () => void): () => void
+}
+export interface UpdateState {
+ status:'idle'|'checking'|'available'|'downloading'|'downloaded'|'installing'|'upToDate'|'error'|'unsupported'
+ current:string;latest?:string;source:string;message:string;errorStage?:'check'|'download';percent?:number;transferred?:number;total?:number;bytesPerSecond?:number
 }

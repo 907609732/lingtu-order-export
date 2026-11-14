@@ -7,6 +7,7 @@ import type {PlanInput} from '../../shared/types'
 import ExecutionLog from './ExecutionLog.vue'
 import OrderTable from './OrderTable.vue'
 import SupportAuthor from './SupportAuthor.vue'
+import UpdatePanel from './UpdatePanel.vue'
 import {Clock,QuestionFilled,Setting,Lock} from '@element-plus/icons-vue'
 import logoUrl from './assets/logo-icon.png'
 const desk = window.desk
@@ -43,8 +44,7 @@ async function toggleLogging(){const enabled=!state.value?.logging.enabled;await
 async function toggleExecutionLog(){const visible=!state.value?.showExecutionLog;await action(()=>desk.setExecutionLogVisible(visible),visible?'执行日志已显示，回到采集页面即可查看。':'执行日志面板已隐藏，重启后保留选择。')}
 async function navigate(s:'export'|'history'|'settings'|'help'){await hidePage();section.value=s}
 async function openTask(t:Task){selected.value=t.platform;taskId.value=t.id;from.value=t.from;to.value=t.to;section.value='export';page.value=1;await refresh()}
-async function checkUpdate(){await action(async()=>{const info=await desk.checkUpdate();notice.value=info?`发现新版本 v${info.latest}，可前往下载。`:'当前已是最新版本。'})}
-function openUpdate(){void desk.openUpdate()}
+async function openUpdate(){await navigate('settings');await nextTick();const panel=document.getElementById('software-update');panel?.scrollIntoView({behavior:'smooth',block:'center'});panel?.focus({preventScroll:true})}
 function openWebsite(){void desk.openWebsite()}
 function openRepository(){void desk.openRepository()}
 onMounted(async()=>{await action(async()=>{await refresh();const latest=tasks.value[0];if(latest)await openTask(latest)});off=desk.onChange(()=>{if(refreshPending)return;refreshPending=true;setTimeout(()=>{refreshPending=false;void refresh()},250)});offUpdate=desk.onUpdate(()=>{void refresh()})})
@@ -60,7 +60,7 @@ onUnmounted(()=>{off?.();offUpdate?.()})
       <div class="side-bottom"><button :class="{active:section==='history'}" @click="navigate('history')"><Clock aria-hidden="true"/><span>导出任务</span><small>{{state?.tasks.length||0}}</small></button><button :class="{active:section==='help'}" @click="navigate('help')"><QuestionFilled aria-hidden="true"/><span>使用教程</span></button><button :class="{active:section==='settings'}" @click="navigate('settings')"><Setting aria-hidden="true"/><span>保存与设置</span></button><div class="local-badge"><Lock aria-hidden="true"/> 数据保存在这台电脑</div></div>
     </aside>
     <main>
-      <header class="topbar"><div class="breadcrumb">个人工作台 <span>/</span> {{section==='history'?'导出任务':section==='settings'?'保存与设置':section==='help'?'使用教程':platform?.name}}</div><div class="version">本机版 <span>v{{state?.version||'0.1.0'}}</span><a v-if="state?.update" class="update-link" href="#" @click.prevent="openUpdate">新版本 v{{state.update.latest}} ↗</a></div></header>
+      <header class="topbar"><div class="breadcrumb">个人工作台 <span>/</span> {{section==='history'?'导出任务':section==='settings'?'保存与设置':section==='help'?'使用教程':platform?.name}}</div><div class="version">本机版 <span>v{{state?.version||'0.1.0'}}</span><button class="text-button update-link" @click="openUpdate">{{state?.update?.status==='available'?`新版本 v${state.update.latest}`:state?.update?.status==='downloading'?'更新下载中':state?.update?.status==='downloaded'?'更新待安装':'软件更新'}}</button></div></header>
       <div class="content" :class="section">
         <div v-if="notice" class="notice" :class="{error}">{{notice}}<button @click="notice=''">×</button></div>
         <template v-if="section==='export'">
@@ -103,7 +103,8 @@ onUnmounted(()=>{off?.();offUpdate?.()})
           </section>
           <section class="settings-card"><h2>导出文件夹</h2><p class="path">{{state?.outputDir||'还未选择，首次导出前设置即可'}}</p><div class="button-row"><button class="primary" @click="choose">选择文件夹</button><button class="secondary" :disabled="!state?.outputDir" @click="action(()=>desk.openOutput())">打开文件夹</button></div></section>
           <section class="settings-card"><h2>当前验证状态</h2><p>开发验证版。程序安装、样例解析和文件生成，与真实平台采集验收分别记录。请先使用短日期范围核对订单。</p></section>
-          <section class="settings-card about-card"><h2>关于</h2><p class="about-brand">电商平台采购订单导出 <span class="by">BY 五成</span></p><div class="button-row"><button class="secondary" :disabled="busy" @click="openWebsite">访问官网 ↗</button><button class="secondary" :disabled="busy" @click="openRepository">GitHub 仓库 ↗</button><button class="secondary" :disabled="busy" @click="checkUpdate">检查更新</button></div><p v-if="state?.update" class="update-tip">发现新版本 v{{state.update.latest}}，<a href="#" @click.prevent="openUpdate">前往下载</a></p></section>
+          <section class="settings-card about-card"><h2>关于</h2><p class="about-brand">电商平台采购订单导出 <span class="by">BY 五成</span></p><div class="button-row"><button class="secondary" :disabled="busy" @click="openWebsite">访问官网 ↗</button><button class="secondary" :disabled="busy" @click="openRepository">GitHub 仓库 ↗</button></div></section>
+          <UpdatePanel v-if="state?.update" :update="state.update" :business-busy="busy||!!state.proxy.running||state.tasks.some(t=>t.status==='running')" @refresh="refresh" />
           <SupportAuthor />
         </template>
         <template v-else>

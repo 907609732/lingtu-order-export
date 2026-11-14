@@ -1,7 +1,9 @@
 name: Build Windows
 on:
   push:
-    branches: ['master', 'codex/rename-procurement-export']
+    branches: ['master', 'codex/rename-procurement-export', 'codex/in-app-updates-20261114']
+  pull_request:
+    branches: ['master']
   workflow_dispatch:
 permissions:
   contents: read
@@ -22,8 +24,18 @@ jobs:
       - run: npm run dist
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Verify complete update assets
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          node scripts/verify-update-assets.mjs release $version
+          if ($LASTEXITCODE -ne 0) { throw 'Update asset verification failed' }
+      - name: Check real Electron update UI and IPC with isolated data
+        run: node tests/update-ui-smoke.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: procurement-order-export-windows
-          path: release/*Setup.exe
+          path: |
+            release/*Setup.exe
+            release/latest.yml
           if-no-files-found: error
