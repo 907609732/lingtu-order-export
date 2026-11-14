@@ -13,7 +13,7 @@ export async function readAlibabaOfficialReport(buffer:Buffer,options:AlibabaOff
  checkRange(options.from,options.to);if(!options.account.trim())throw new Error('必须绑定报表账号');for(const s of options.segments||[]){checkRange(s.from,s.to);if(s.from<options.from||s.to>options.to)throw new Error('所选月份超出任务范围')}
  const workbook=new ExcelJS.Workbook();await workbook.xlsx.load(buffer as any)
  const audit:AlibabaOfficialAudit={rows:0,uniqueOrders:0,importedOrders:0,outOfRange:0,accountMismatch:0,duplicates:0,missing:0,conflicts:[],warnings:['真实官方表头及导出范围尚未验收；范围完整性待核对'],scopeVerified:false}
- const orders=new Map<string,Order>(),seen=new Set<string>(),allIds=new Set<string>();let recognized=false
+ const orders=new Map<string,Order>(),seen=new Set<string>(),allIds=new Set<string>(),creationDates=new Map<string,string>();let recognized=false
  for(const sheet of workbook.worksheets){if(!sheet.rowCount)continue;const header=sheet.getRow(1);const headers:string[]=[];header.eachCell((c,i)=>headers[i]=c.text.trim());const columns=new Map<string,number[]>();for(const [key,names] of Object.entries(aliases)){const indices=headers.flatMap((v,i)=>names.includes(v)?[i]:[]);if(indices.length)columns.set(key,indices)}
  for(const required of ['id','createdAt','paidFen','title'])if(!columns.has(required))throw new Error(`不支持的报表表头，缺少${aliases[required][0]}`);recognized=true
  for(let n=2;n<=sheet.rowCount;n++){const row=sheet.getRow(n);if(!row.hasValues)continue;audit.rows++
@@ -21,8 +21,10 @@ export async function readAlibabaOfficialReport(buffer:Buffer,options:AlibabaOff
  const text=(key:string)=>get(key)?.text.trim()||'';const idCell=get('id');const id=text('id').replace(/^['’]/,'');if(!idCell||!/^\d+$/.test(id)||(typeof idCell.value==='number'&&(!Number.isSafeInteger(idCell.value)||String(idCell.value).length>15))||typeof idCell.value==='object')throw new Error(`第${n}行订单编号精度不可靠或缺失`)
  const createdAt=date(get('createdAt')?.value);allIds.add(id)
  const raw:Record<string,string>={};headers.forEach((h,i)=>{if(h)raw[`${h}${headers.indexOf(h)!==i?`[${i}]`:''}`]=row.getCell(i).text});const fingerprint=JSON.stringify([id,raw]);if(seen.has(fingerprint)){audit.duplicates++;continue}seen.add(fingerprint)
- if(!inRange(createdAt,options.from,options.to)||(options.segments&&!options.segments.some(s=>inRange(createdAt,s.from,s.to)))){audit.outOfRange++;continue}
  if(text('account')&&text('account')!==options.account){audit.accountMismatch++;continue}
+ const previousDate=creationDates.get(id);if(previousDate&&previousDate!==createdAt)throw new Error(`订单${id}下单时间冲突：${previousDate} / ${createdAt}，整份报表未导入，请核对原始报表`)
+ creationDates.set(id,createdAt)
+ if(!inRange(createdAt,options.from,options.to)||(options.segments&&!options.segments.some(s=>inRange(createdAt,s.from,s.to)))){audit.outOfRange++;continue}
  const money=(key:string)=>{const value=text(key);if(!value)return null;const amount=moneyFen(value);if(amount===null||amount<0||!/^[¥￥\s]*[\d,]+(?:\.\d{1,2})?\s*元?$/.test(value))throw new Error(`第${n}行金额无效：${key}`);return amount}
  if(!text('title')||!text('paidFen'))throw new Error(`第${n}行缺少商品或订单金额`)
  const quantity=text('quantity')?Number(text('quantity')):null;if(quantity!==null&&(!Number.isFinite(quantity)||quantity<=0))throw new Error(`第${n}行数量无效`)
