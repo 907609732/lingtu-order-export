@@ -2,7 +2,8 @@
 import {computed} from 'vue'
 import {Loading,WarningFilled} from '@element-plus/icons-vue'
 import type {Task} from '../../shared/types'
-const props=defineProps<{task:Task;pendingDetails:number;resumeGuidance?:string}>()
+const props=defineProps<{task:Task;pendingDetails:number;resumeGuidance?:string;busy?:boolean}>()
+const emit=defineEmits<{verify:[]}>()
 const official=computed(()=>props.task.mode==='official-export')
 const officialPhase=computed(()=>({search:'按月份查询订单',submit:'申请官方报表',waiting:'等待官方生成报表',download:'下载官方报表',import:'导入并自动核对',complete:'官方报表处理完成'}[props.task.officialExport?.phase||'search']))
 const running=computed(()=>props.task.status==='running')
@@ -13,7 +14,7 @@ const title=computed(()=>official.value?(props.task.status==='needs_login'?'需�
 <template>
   <section class="collection-activity" :class="{running,attention:!running}" role="status" aria-label="采集活动" :aria-busy="running">
     <component :is="running?Loading:WarningFilled" class="activity-icon" aria-hidden="true" />
-    <div class="activity-copy"><strong>{{title}}</strong><p v-if="official">{{officialPhase}}</p><p>{{task.message}}</p><p v-if="!running&&resumeGuidance">{{resumeGuidance}}</p></div>
+    <div class="activity-copy"><strong>{{title}}</strong><p v-if="official">{{officialPhase}}</p><p>{{task.message}}</p><p v-if="task.status==='needs_login'">请打开平台页，手动完成登录或滑块验证，再点击②继续。当前进度已保留。</p><p v-else-if="!running&&resumeGuidance">{{resumeGuidance}}</p><button v-if="task.status==='needs_login'" class="secondary" :disabled="busy" @click="emit('verify')">打开验证页面</button></div>
     <div class="activity-counts"><strong>{{official?'已导入':'已采集'}} {{task.count}} 笔</strong><span v-if="official">{{task.officialExport?.phase==='complete'?'核对结果见下方':'按官方页面实际阶段更新'}}</span><span v-else-if="details">待提取详情 {{pendingDetails}} 笔</span><template v-else><span>本轮已读取 {{task.pages}} 页</span><span v-if="task.plan">计划 {{task.plan.segments.filter(s=>s.status==='completed').length}} / {{task.plan.segments.length}} 段</span></template></div>
   </section>
 </template>

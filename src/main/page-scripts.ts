@@ -33,7 +33,12 @@ export function advanceOrderPage():string {
 }
 export async function mtopRequest(api:string,data:any,platform='xianyu',classify=mtopFailure):Promise<any>{
   const w=window as any
-  const blocked=()=>/登录|安全验证|验证码/.test(document.title)||/login\.taobao\.com|passport\./.test(location.hostname)||[...document.querySelectorAll('iframe[src*="login.taobao.com"],iframe[src*="passport.1688.com"]')].some(el=>!!el.getClientRects().length)
+  const visible=(el:Element)=>{
+    if(!Array.from(el.getClientRects()).some(r=>r.width>0&&r.height>0))return false
+    for(let p:Element|null=el;p;p=p.parentElement){if(typeof getComputedStyle==='function'){const s=getComputedStyle(p);if(s.display==='none'||s.visibility==='hidden'||s.visibility==='collapse'||s.opacity==='0')return false}}
+    return true
+  }
+  const blocked=()=>/登录|安全验证|验证码/.test(document.title)||/login\.taobao\.com|passport\./.test(location.hostname)||[...document.querySelectorAll('iframe[src*="login.taobao.com"],iframe[src*="passport.1688.com"],iframe[src*="_____tmd_____/punish"]')].some(visible)
   const failure=(category:string,code?:string)=>({__orderdeskFailure:{category,code}})
   for(let attempt=0;attempt<32&&!(w.lib?.mtop||w.mtop)?.request;attempt++){
     if(blocked())return failure('login_or_verification')
@@ -44,10 +49,11 @@ export async function mtopRequest(api:string,data:any,platform='xianyu',classify
   if(!mtop?.request)return failure('page_not_ready')
   return new Promise(resolve=>{
     let settled=false
-    const finish=(v:any)=>{if(settled)return;settled=true;clearTimeout(timer);resolve(v)}
-    const timer=setTimeout(()=>finish(failure('timeout','TIMEOUT')),25000)
-    const fail=(v:any)=>finish({__orderdeskFailure:classify(v)})
-    const done=(v:any)=>{const ret=Array.isArray(v?.ret)?v.ret:typeof v?.ret==='string'?[v.ret]:[];if(ret.length&&!ret.some((s:unknown)=>typeof s==='string'&&s.split('::')[0]==='SUCCESS'))fail(v);else finish(v)}
+    const finish=(v:any)=>{if(settled)return;settled=true;clearTimeout(timer);clearInterval(verificationWatch);resolve(v)}
+    const timer=setTimeout(()=>finish(blocked()?failure('login_or_verification'):failure('timeout','TIMEOUT')),25000)
+    const verificationWatch=setInterval(()=>{if(blocked())finish(failure('login_or_verification'))},350)
+    const fail=(v:any)=>finish(blocked()?failure('login_or_verification'):{__orderdeskFailure:classify(v)})
+    const done=(v:any)=>{if(blocked()){finish(failure('login_or_verification'));return}const ret=Array.isArray(v?.ret)?v.ret:typeof v?.ret==='string'?[v.ret]:[];if(ret.length&&!ret.some((s:unknown)=>typeof s==='string'&&s.split('::')[0]==='SUCCESS'))fail(v);else finish(v)}
     try {
       const options=platform==='xianyu'?{appKey:'34839810',accountSite:'xianyu',needLoginPC:false,sessionOption:'AutoLoginOnly'}:{appKey:'12574478',ecode:1,needLogin:true}
       // Match the official Windows buyer page's request contract. Without its

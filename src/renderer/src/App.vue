@@ -117,7 +117,7 @@ onUnmounted(()=>{off?.();offUpdate?.()})
               <details><summary>首次设置步骤与停止方式</summary><ol><li>开启辅助采集后，打开证书，在 Windows 中手动将其导入当前用户的受信任根证书。仅用于本机采集。</li><li>记下原来的代理设置，将手动代理临时设为 <code>127.0.0.1:17869</code>。当前程序尚不自动改动系统设置。</li><li>选择采集时间后点击“② 开始采集”，再打开对应微信小程序的订单列表并向下翻页。</li><li>结束后先恢复原来的系统代理设置，再停止辅助采集或退出软件。</li></ol><button class="text-button" @click="action(()=>desk.proxyStop(),'本机监听已停止，请确认系统代理已恢复。')">停止辅助采集</button></details>
             </section>
             <div v-if="detailHighlight" class="detail-prompt" role="status">{{selected==='jd'?'通过京东官方导出补充收件信息，自动按本任务日期范围匹配，可暂停后继续。':'列表已采集完成，请提取详情'}} <span>· {{detailPending}} 笔待提取</span></div>
-            <CollectionActivity v-if="task && activityVisible" :task="task" :pending-details="detailPending" :resume-guidance="resumeGuidance" />
+            <CollectionActivity v-if="task && activityVisible" :task="task" :pending-details="detailPending" :resume-guidance="resumeGuidance" :busy="busy" @verify="openPage" />
             <OfficialExportAudit v-if="officialMode && task?.officialExport?.audit" :audit="task.officialExport.audit" :expanded="auditOpen" @toggle="showAudit" />
             <details v-if="task?.plan" class="plan-inline">
               <summary><strong>采集进度 {{task.plan.segments.filter(s=>s.status==='completed').length}} / {{task.plan.segments.length}}</strong><span :title="task.message">{{task.message}}</span><span class="plan-expand">展开进度</span></summary>

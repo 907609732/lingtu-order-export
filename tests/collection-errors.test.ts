@@ -6,6 +6,30 @@ import { safeError } from '../src/main/diagnostics'
 afterEach(()=>{vi.useRealTimers();vi.unstubAllGlobals()})
 function page(request?:any){vi.stubGlobal('window',{lib:{mtop:request?{request}:undefined}});vi.stubGlobal('document',{title:'我的淘宝',querySelectorAll:()=>[]});vi.stubGlobal('location',{hostname:'buyertrade.taobao.com'})}
 describe('platform errors and buyer request contract',()=>{
+  it('stops before requesting when a visible slider challenge is present',async()=>{
+    const request=vi.fn(()=>Promise.resolve({ret:['SUCCESS']}));page(request)
+    vi.stubGlobal('document',{title:'已买到的货品',querySelectorAll:(s:string)=>s.includes('_____tmd_____')?[{getClientRects:()=>[{width:420,height:320}],parentElement:null}]:[]})
+    expect(await mtopRequest('api',{},'alibaba')).toEqual({__orderdeskFailure:{category:'login_or_verification',code:undefined}})
+    expect(request).not.toHaveBeenCalled()
+  })
+  it('detects a slider appearing during a request and clears its polling timers',async()=>{
+    vi.useFakeTimers();let shown=false;let success:any
+    page((_o:any,done:any)=>{success=done})
+    vi.stubGlobal('document',{title:'已买到的货品',querySelectorAll:(s:string)=>shown&&s.includes('_____tmd_____')?[{getClientRects:()=>[{width:420,height:320}],parentElement:null}]:[]})
+    const waiting=mtopRequest('api',{},'alibaba');shown=true
+    await vi.advanceTimersByTimeAsync(500)
+    expect(await waiting).toEqual({__orderdeskFailure:{category:'login_or_verification',code:undefined}})
+    expect(vi.getTimerCount()).toBe(0)
+    success({ret:['SUCCESS']});expect(vi.getTimerCount()).toBe(0)
+  })
+  it('ignores a hidden residual slider iframe',async()=>{
+    const request=vi.fn(()=>Promise.resolve({ret:['SUCCESS']}));page(request)
+    const parent={parentElement:null};const frame={getClientRects:()=>[{width:420,height:320}],parentElement:parent}
+    vi.stubGlobal('getComputedStyle',(el:unknown)=>({display:el===parent?'none':'block',visibility:'visible',opacity:'1'}))
+    vi.stubGlobal('document',{title:'已买到的货品',querySelectorAll:(s:string)=>s.includes('_____tmd_____')?[frame]:[]})
+    expect(await mtopRequest('api',{},'alibaba')).toEqual({ret:['SUCCESS']})
+    expect(request).toHaveBeenCalledOnce()
+  })
   it('does not treat an internal service fault as expired login',()=>{
     const result=mtopFailure({ret:['FAIL_SYS_SERVICE_INNER_FAULT::PRIVATE_TOKEN 请登录'],data:{private:'PRIVATE_ORDER'}})
     expect(result).toEqual({category:'platform_service',code:'FAIL_SYS_SERVICE_INNER_FAULT'})
