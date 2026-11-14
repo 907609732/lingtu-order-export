@@ -128,9 +128,10 @@ export class Collector {
     const prior=this.views.get(id);if(prior&&!prior.webContents.isDestroyed())return prior
     const ses=session.fromPartition(`persist:orderdesk-${id}`);ses.setPermissionRequestHandler((_w,_p,done)=>done(false))
     const view=new WebContentsView({webPreferences:{session:ses,nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true}})
-    let loginReturns=0
-    view.webContents.on('did-navigate',(_event,url)=>{
-      if(id==='alibaba'&&isAlibabaLoginLanding(url)&&loginReturns<2){loginReturns++;void view.webContents.loadURL(platformById(id).url).catch(()=>{})}
+    let loginReturns=0,returningFromLogin=false
+    // 1688 embeds its Taobao login page; the post-login error can remain inside that iframe.
+    view.webContents.on('did-frame-navigate',(_event,url)=>{
+      if(id==='alibaba'&&isAlibabaLoginLanding(url)&&loginReturns<2&&!returningFromLogin){loginReturns++;returningFromLogin=true;void view.webContents.loadURL(platformById(id).url).catch(()=>{}).finally(()=>{returningFromLogin=false})}
     })
     view.webContents.setWindowOpenHandler(({url})=>{try{if(allowedHost(id,new URL(url).hostname))void view.webContents.loadURL(url)}catch{}return{action:'deny'}})
     view.webContents.on('will-navigate',(event,url)=>{try{const host=new URL(url).hostname;if(!allowedHost(id,host)&&!['login.taobao.com','passport.jd.com','passport.pinduoduo.com'].includes(host))event.preventDefault()}catch{event.preventDefault()}})
