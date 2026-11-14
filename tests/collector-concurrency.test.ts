@@ -5,6 +5,15 @@ import {Collector} from '../src/main/collector'
 import {CollectionError} from '../src/main/collection-errors'
 function fixture(){const tasks:any={a:{id:'a',platform:'taobao',status:'running'},b:{id:'b',platform:'jd',status:'running'}};const store:any={get:(id:string)=>tasks[id],update:(id:string,patch:any)=>Object.assign(tasks[id],patch),orders:()=>[],add:vi.fn()};const c:any=new Collector({on(){},contentView:{addChildView(){},removeChildView(){}},getContentSize:()=>[1200,800]} as any,store,()=>{},{event(){}} as any);c.ensure=async()=>({});return{c,tasks,store}}
 function deferred(){let resolve!:()=>void;const promise=new Promise<void>(r=>resolve=r);return{promise,resolve}}
+it('routes valid captured orders to their owner and drops valid old-generation payloads',()=>{
+ const {c,tasks,store}=fixture();Object.assign(tasks.a,{platform:'alibaba',pages:0,count:0})
+ const old=c.registry.acquire('alibaba','a'),other=c.registry.acquire('jd','b'),capture=c.capture('alibaba')
+ const body=JSON.stringify({idStr:'1002',gmtCreate:'2026-10-01 10:00:00',sumPayment:'100',orderEntries:[{sourceId:'1',productName:'synthetic',quantity:{realAmount:1}}]})
+ capture(body);expect(store.add).toHaveBeenCalledWith('a',[expect.objectContaining({platform:'alibaba',id:'1002'})]);expect(old.captureCount).toBe(1);expect(other.captureCount).toBe(0)
+ store.add.mockClear();c.stop('a');c.registry.release(old);c.stopped.delete('a');const resumed=c.registry.acquire('alibaba','a')
+ capture(body);expect(store.add).not.toHaveBeenCalled();c.capture('alibaba')(body)
+ expect(store.add).toHaveBeenCalledOnce();expect(resumed.captureCount).toBe(1);expect(other.captureCount).toBe(0)
+})
 it('runs two platforms with real overlap; stopping one rejects reentry until drain',async()=>{const {c,tasks}=fixture(),a=deferred(),b=deferred(),entered:string[]=[];c.runTaobao=async()=>{entered.push('a');await a.promise};c.runJD=async()=>{entered.push('b');await b.promise};const pa=c.run(tasks.a),pb=c.run(tasks.b);await Promise.resolve();expect(entered).toEqual(['a','b']);c.stop('a');expect(()=>c.assertIdle('taobao')).toThrow();expect(c.platformRuns.find((x:any)=>x.platform==='jd').stopping).toBe(false);a.resolve();await pa;expect(()=>c.assertIdle('taobao')).not.toThrow();b.resolve();await pb;expect(c.platformRuns).toEqual([])})
 it('verification failure on A leaves B owned and running',async()=>{const {c,tasks}=fixture(),b=deferred();c.runTaobao=async()=>{throw new CollectionError('login_or_verification')};c.runJD=async()=>b.promise;const pa=c.run(tasks.a),pb=c.run(tasks.b);await pa;expect(tasks.a.status).toBe('needs_login');expect(tasks.b.status).toBe('running');expect(c.platformRuns.map((x:any)=>x.taskId)).toEqual(['b']);b.resolve();await pb})
 it('request capture closure rejects stopped and resumed same-id owners',()=>{const{c,tasks,store}=fixture();tasks.a.platform='alibaba';const old=c.registry.acquire('alibaba','a'),capture=c.capture('alibaba');c.stop('a');c.registry.release(old);c.stopped.delete('a');c.registry.acquire('alibaba','a');capture('{}');expect(store.add).not.toHaveBeenCalled()})

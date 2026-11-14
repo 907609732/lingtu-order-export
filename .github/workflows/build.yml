@@ -34,6 +34,10 @@ jobs:
         run: node tests/update-ui-smoke.mjs
       - name: Verify four-step collection with isolated data
         run: node tests/plan-ui-smoke.mjs
+      - name: Verify independent platform collectors and export snapshots
+        run: node tests/platform-concurrency-smoke.mjs
+      - name: Verify concurrent platform switching and background verification
+        run: node tests/platform-concurrency-ui-smoke.mjs
       - name: Verify visible collection activity
         run: node tests/collection-activity-smoke.mjs
       - name: Verify detail export errors and completion with isolated data
