@@ -8,7 +8,7 @@ import {orderColumns,defaultColumnKeys,filterOrders,money,absent,arrival,mark,af
 import OrderDetail from './OrderDetail.vue'
 const props=defineProps<{orders:Order[];platform:PlatformId;taskId:string;busy:boolean}>()
 const emit=defineEmits<{openOrder:[orderId:string]}>()
-const query=ref(''),status=ref(''),shop=ref(''),detail=ref(''),page=ref(1),pageSize=ref(50),jump=ref(1),sortKey=ref('createdAt'),descending=ref(true),columnMenu=ref(false),focused=ref(false),showImages=ref(false),hint=ref('')
+const query=ref(''),status=ref(''),shop=ref(''),detail=ref(''),page=ref(1),pageSize=ref(50),jump=ref(1),sortKey=ref('createdAt'),descending=ref(true),columnMenu=ref(false),focused=ref(false),showImages=ref(true),hint=ref('')
 const visibleKeys=ref<string[]>([...defaultColumnKeys]),table=ref<{doLayout():void;toggleRowExpansion(order:Order):void;setScrollTop(value:number):void}>()
 const visibleColumns=computed(()=>orderColumns.filter(c=>visibleKeys.value.includes(c.key)))
 const filtered=computed(()=>filterOrders(props.orders,{query:query.value,status:status.value,shop:shop.value,detail:detail.value,sortKey:sortKey.value,descending:descending.value}))
@@ -20,8 +20,8 @@ const statuses=computed(()=>[...new Set(props.orders.map(o=>o.status).filter(Boo
 const shops=computed(()=>[...new Set(props.orders.map(o=>o.shop).filter(Boolean))].sort())
 const hasFilter=computed(()=>!!(query.value||status.value||shop.value||detail.value))
 function reset(){query.value='';status.value='';shop.value='';detail.value=''}
-function loadPreferences(){try{const saved=JSON.parse(localStorage.getItem('order-table:'+props.platform)||'null');visibleKeys.value=Array.isArray(saved?.columns)?saved.columns.filter((key:string)=>orderColumns.some(c=>c.key===key)):[...defaultColumnKeys];showImages.value=saved?.images===true;pageSize.value=[20,50,100,200].includes(saved?.pageSize)?saved.pageSize:50}catch{visibleKeys.value=[...defaultColumnKeys]}}
-function savePreferences(){try{localStorage.setItem('order-table:'+props.platform,JSON.stringify({columns:visibleKeys.value,images:showImages.value,pageSize:pageSize.value}))}catch{hint.value='列设置暂时无法保存，下次打开会恢复默认。'}}
+function loadPreferences(){try{const saved=JSON.parse(localStorage.getItem('order-table:'+props.platform)||'null');visibleKeys.value=Array.isArray(saved?.columns)?saved.columns.filter((key:string)=>orderColumns.some(c=>c.key===key)):[...defaultColumnKeys];showImages.value=saved?.imageDefaultVersion===1?saved.images!==false:true;pageSize.value=[20,50,100,200].includes(saved?.pageSize)?saved.pageSize:50}catch{visibleKeys.value=[...defaultColumnKeys];showImages.value=true}}
+function savePreferences(){try{localStorage.setItem('order-table:'+props.platform,JSON.stringify({columns:visibleKeys.value,images:showImages.value,imageDefaultVersion:1,pageSize:pageSize.value}))}catch{hint.value='列设置暂时无法保存，下次打开会恢复默认。'}}
 function toggleColumn(key:string){visibleKeys.value=visibleKeys.value.includes(key)?visibleKeys.value.filter(k=>k!==key):[...visibleKeys.value,key];savePreferences();void nextTick(()=>table.value?.doLayout())}
 function restoreColumns(){visibleKeys.value=[...defaultColumnKeys];savePreferences()}
 function sort({prop,order}:{prop:string|null;order:string|null}){sortKey.value=order&&prop?prop:'createdAt';descending.value=order?order==='descending':true;page.value=1}
