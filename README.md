@@ -8,7 +8,7 @@
 
 在 Windows 上采集多平台买家历史订单，整理商品明细，导出 Excel / CSV。
 
-**简体中文** · [English](README.en.md)
+**简体中文** · [English](docs/README.en.md)
 
 [![Release](https://img.shields.io/github/v/release/907609732/lingtu-order-export?color=0071e3&label=Release)](https://github.com/907609732/lingtu-order-export/releases/latest)
 [![Windows build](https://github.com/907609732/lingtu-order-export/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/907609732/lingtu-order-export/actions/workflows/build.yml)

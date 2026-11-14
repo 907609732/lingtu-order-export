@@ -8,10 +8,10 @@
   "type": "module",
   "main": "out/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev",
-    "build": "vue-tsc --noEmit && electron-vite build",
-    "start": "electron-vite preview",
-    "test": "vitest run",
+    "dev": "electron-vite dev --config build/config/electron.vite.config.ts",
+    "build": "vue-tsc --noEmit && electron-vite build --config build/config/electron.vite.config.ts",
+    "start": "electron-vite preview --config build/config/electron.vite.config.ts",
+    "test": "vitest run --config build/config/vitest.config.ts",
     "dist": "npm run build && electron-builder --win nsis --x64 --publish never",
     "check": "npm run test && npm run build"
   },
