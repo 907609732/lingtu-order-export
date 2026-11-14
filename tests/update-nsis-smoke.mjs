@@ -117,5 +117,5 @@ try {
 } finally {
   server.close()
   // Only the unique integration app is uninstalled; retain test evidence and synthetic data.
-  try {await run(join(installed,`Uninstall ${product}.exe`),['/S'])}catch(error){console.log('Test-only uninstall status: '+error.message)}
+  try {await run(join(installed,'Uninstall LingtuUpdateSmoke.exe'),['/S'])}catch(error){console.log('Test-only uninstall status: '+error.message)}
 }
