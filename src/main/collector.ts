@@ -32,7 +32,7 @@ export class Collector {
   views=new Map<PlatformId,WebContentsView>(); current?:WebContentsView; stopped=new Set<string>(); runs=new Set<string>(); readonly registry=new RunRegistry(); private disposing=false
   constructor(private win:BrowserWindow,private store:Store,private changed:()=>void,private diagnostics:Diagnostics){win.on('resize',()=>this.layout())}
   get platformRuns(){return [...this.registry.leases.values()].map(({platform,taskId,stopping})=>({platform,taskId,stopping}))}
-  assertIdle(platform:PlatformId){if(this.registry.leases.has(platform))throw new Error('当前平台任务正在运行或结束，请稍后再试')}
+  assertIdle(platform:PlatformId){if(this.registry.leases.has(platform)||(platformById(platform).mode==='proxy'&&[...this.registry.leases.keys()].some(id=>platformById(id).mode==='proxy')))throw new Error('当前平台任务正在运行或结束，请稍后再试')}
   capture(platform:PlatformId){const lease=this.registry.leases.get(platform);return (body:string)=>{if(lease)this.accept(platform,body,lease)}}
   private taskLeases=new WeakMap<Task,RunLease>()
   private commit(task:Task,orders:Order[]){if(this.stopped.has(task.id)||!this.registry.valid(this.taskLeases.get(task)))throw new Error('采集已暂停');return this.store.add(task.id,orders)}
@@ -346,7 +346,7 @@ export class Collector {
         if(snap.rows.length&&snap.signature===signature)throw new CollectionError('response_structure')
         signature=snap.signature
         const rows:Order[]=snap.rows.map((r:any)=>({...base,...r,createdAt:dateText(r.createdAt),paidFen:moneyFen(r.paid),detailState:'pending',missing:['订单详情']}))
-        this.commit(task,rows);this.store.update(task.id,{pages:++pages,cursor:JSON.stringify(snap.hasNext&&!snap.empty?{year,nextPage:page+1}:{year:year-1,nextPage:1}),message:`正在读取京东 ${year} 年第 ${page} 页`});this.changed()
+        await this.assertPlanAccount(view,'jd',task);this.commit(task,rows);this.store.update(task.id,{pages:++pages,cursor:JSON.stringify(snap.hasNext&&!snap.empty?{year,nextPage:page+1}:{year:year-1,nextPage:1}),message:`正在读取京东 ${year} 年第 ${page} 页`});this.changed()
         this.pageRead(task,page,rows.length,{year})
         if(!snap.hasNext||snap.empty)break
         if(reads===999){this.store.update(task.id,{listOutcome:'limit',status:'partial',message:'京东本年度达到分页上限，可继续采集'});this.changed();return}
@@ -387,6 +387,7 @@ export class Collector {
   }
   private async pddIdentity(task:Task,view:WebContentsView){
     const cookies=await view.webContents.session.cookies.get({url:'https://mobile.yangkeduo.com/'})
+    if(this.stopped.has(task.id)||!this.registry.valid(this.taskLeases.get(task)))throw new Error('采集已暂停')
     const accessToken=cookies.find(c=>c.name==='PDDAccessToken')?.value||'',userId=cookies.find(c=>c.name==='pdd_user_id')?.value||''
     if(!accessToken||!/^\d{1,40}$/.test(userId))throw new CollectionError('login_or_verification')
     const accountKey=createHash('sha256').update('orderdesk:pdd:'+userId).digest('hex'),latest=this.store.get(task.id)
@@ -451,6 +452,7 @@ export class Collector {
   }
   private async assertJdExportAccount(task:Task,view:WebContentsView){
     const current=this.store.get(task.id),cookies=await view.webContents.session.cookies.get({url:platformById('jd').url})
+    if(this.stopped.has(task.id)||!this.registry.valid(this.taskLeases.get(task)))throw new Error('采集已暂停')
     const identity=current.accountCookie?cookies.find(cookie=>cookie.name===current.accountCookie):['pin','pt_pin'].map(name=>cookies.find(cookie=>cookie.name===name&&cookie.value)).find(Boolean)
     if(!identity?.value)throw new CollectionError(current.accountKey?'account_changed':'login_or_verification')
     const key=createHash('sha256').update('orderdesk:jd:'+identity.name+':'+identity.value).digest('hex')
@@ -574,7 +576,7 @@ export class Collector {
       if(snap.blocked)throw new Error(snap.message)
       const base:Partial<Order>={platform:task.platform,account:'当前账号',paidAt:'',shippedAt:'',completedAt:'',status:'',shop:'',sellerId:'',paidFen:null,freightFen:null,refundFen:null,refundStatus:'',receiver:'',phone:'',address:'',logistics:'',tracking:'',remark:'',detailUrl:'',extra:{},source:'page',capturedAt:new Date().toISOString()}
       const rows:Order[]=snap.rows.map((r:any)=>({...base,...r,createdAt:dateText(r.createdAt),paidFen:moneyFen(r.paid),detailState:'pending',missing:['订单详情']}))
-      if(rows.length)this.commit(task,rows)
+      await this.assertPlanAccount(view,task.platform,task);if(rows.length)this.commit(task,rows)
       this.pageRead(task,page+1,rows.length)
       const changed=snap.signature!==lastSignature||(this.registry.leases.get(task.platform)?.captureCount||0)!==lastCapture;stagnant=changed?0:stagnant+1;lastSignature=snap.signature;lastCapture=(this.registry.leases.get(task.platform)?.captureCount||0)
       const count=this.store.get(task.id).count;this.store.update(task.id,{message:`已读取 ${count} 笔，正在检查后续订单`,cursor:JSON.stringify({page,signature:lastSignature})});this.changed()
