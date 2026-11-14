@@ -9,7 +9,7 @@ let app
 try{
  app=await electron.launch({executablePath:resolve('node_modules/electron/dist/electron.exe'),args:['.'],env})
  const page=await app.firstWindow();await page.getByRole('heading',{name:'淘宝 / 天猫订单导出'}).waitFor()
- await app.evaluate(({BrowserWindow})=>{const win=BrowserWindow.getAllWindows()[0];win.hide();win.setSize(1120,740)})
+ await app.evaluate(({BrowserWindow},ci)=>{const win=BrowserWindow.getAllWindows()[0];if(ci)win.show();else win.hide();win.setSize(1120,740)},!!process.env.CI)
  const db=new DatabaseSync(join(root,'orders.sqlite'))
  db.prepare('INSERT OR REPLACE INTO settings VALUES(?,?)').run('showExecutionLog','false')
  const base={id:'synthetic-activity',platform:'alibaba',account:'合成测试',from:'2026-10-01',to:'2026-11-30',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),count:12,pages:3,message:'正在等待平台返回订单，已等待 10 秒',cursor:'',exportedPath:'',operation:'list',listOutcome:'pending',plan:{granularity:'month',segments:[{id:'a',from:'2026-10-01',to:'2026-10-31',status:'completed',count:12},{id:'b',from:'2026-11-01',to:'2026-11-30',status:'running',count:0}],buckets:[]}}
