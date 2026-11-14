@@ -1,6 +1,6 @@
 export type CollectionMode = 'ordinary' | 'official-export'
 export interface AlibabaOfficialAudit { rows:number; uniqueOrders:number; importedOrders:number; outOfRange:number; accountMismatch:number; duplicates:number; missing:number; conflicts:{orderId:string;field:string;values:string[]}[]; warnings:string[]; scopeVerified:boolean }
-export interface AlibabaOfficialCheckpoint { phase:'search'|'submit'|'waiting'|'download'|'import'|'complete'; segmentIndex:number; expectedTotal?:number; submission?:'prepared'|'unknown'|'accepted'; token?:string; filePath?:string; fileSha256?:string; accountKey?:string; audit?:AlibabaOfficialAudit }
+export interface AlibabaOfficialCheckpoint { phase:'search'|'submit'|'waiting'|'download'|'import'|'complete'; segmentIndex:number; rangeSignature?:string; expectedTotal?:number; submission?:'prepared'|'unknown'|'accepted'; token?:string; filePath?:string; fileSha256?:string; accountKey?:string; audit?:AlibabaOfficialAudit }
 export type PlatformId = 'taobao' | 'alibaba' | 'pdd' | 'jd' | 'xianyu' | 'dewu' | 'kuaishou' | 'eleme' | 'meituan'
 export type TaskStatus = 'running' | 'paused' | 'needs_login' | 'partial' | 'completed' | 'failed'
 export interface Platform {
@@ -34,7 +34,7 @@ export interface StartInput { mode?:CollectionMode; platform: PlatformId; from: 
 export interface ExportInput { taskId: string; format: 'xlsx' | 'csv'; images: boolean }
 export interface LoggingState { enabled: boolean; directory: string; error: string }
 export interface ExecutionEntry { id: number; time: string; level: 'info'|'success'|'warning'|'error'; message: string; platform?: PlatformId; taskId?: string }
-export interface AppState { platforms: Platform[]; tasks: Task[]; outputDir: string; version: string; logging: LoggingState; showExecutionLog: boolean; proxy: { running: boolean; port: number; certificate: string }; update: UpdateState }
+export interface AppState { alibabaOfficialExportAvailable?:boolean; platforms: Platform[]; tasks: Task[]; outputDir: string; version: string; logging: LoggingState; showExecutionLog: boolean; proxy: { running: boolean; port: number; certificate: string }; update: UpdateState }
 export interface DeskAPI {
   state(): Promise<AppState>; orders(taskId: string): Promise<Order[]>; start(input: StartInput): Promise<Task>
   login(platform: PlatformId, mode?:CollectionMode): Promise<void>; pause(id: string): Promise<void>; resume(id: string): Promise<void>; finish(id: string): Promise<void>

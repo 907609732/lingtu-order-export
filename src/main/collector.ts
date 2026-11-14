@@ -56,7 +56,7 @@ export class Collector {
     if(!task.accountKey)this.store.update(task.id,{accountKey:key,accountCookie:identity.name})
   }
   private pageRead(task:Task,page:number,received:number,extra:Record<string,unknown>={}){this.diagnostics.event('collector.page',{platform:task.platform,taskId:task.id,page,received,count:this.store.get(task.id).count,...extra})}
-  layout(){if(this.current){const [w,h]=this.win.getContentSize();this.current.setBounds({x:200,y:146,width:Math.max(300,w-216),height:Math.max(200,h-162)})}}
+  layout(){if(this.current){const [w,h]=this.win.getContentSize();const top=this.views.get('alibaba')===this.current&&this.viewModes.get('alibaba')==='official-export'?220:146;this.current.setBounds({x:200,y:top,width:Math.max(300,w-216),height:Math.max(200,h-top-16)})}}
   async openOrder(order:Order){
     const url=order.platform==='taobao'?taobaoDetailUrl(order.detailUrl,order.id):order.detailUrl
     let parsed:URL;try{parsed=new URL(url)}catch{throw new Error('此订单尚未取得平台详情链接')}

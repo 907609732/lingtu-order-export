@@ -2,6 +2,7 @@
 import {_electron as electron,expect} from '@playwright/test'
 import {mkdtemp} from 'node:fs/promises'
 import {resolve} from 'node:path'
+import {DatabaseSync} from 'node:sqlite'
 import assert from 'node:assert/strict'
 const root=await mkdtemp(resolve('.test-output/official-ui-'))
 const env={...process.env,ORDERDESK_TEST_DATA:root};delete env.ELECTRON_RUN_AS_NODE
@@ -9,6 +10,18 @@ let app
 try{
  app=await electron.launch({executablePath:resolve('node_modules/electron/dist/electron.exe'),args:['.'],env,timeout:45000})
  const p=await app.firstWindow();await p.waitForFunction(()=>!!window.desk)
+ await p.evaluate(()=>window.desk.state())
+ const gateDb=new DatabaseSync(resolve(root,'orders.sqlite'))
+ try{
+  const task={id:'gate-official',platform:'alibaba',mode:'official-export',account:'synthetic',from:'2026-01-01',to:'2026-01-31',status:'paused',createdAt:'2026-11-15',updatedAt:'2026-11-15',count:0,pages:0,message:'synthetic gate',cursor:'',exportedPath:''}
+  gateDb.prepare('INSERT INTO tasks VALUES(?,?,?)').run(task.id,task.platform,JSON.stringify(task))
+  for(const action of ['start','resume','retry']){
+   const result=await p.evaluate(async action=>{try{await window.desk[action](action==='start'?{platform:'alibaba',mode:'official-export',from:'2026-01-01',to:'2026-01-31'}:'gate-official');return ''}catch(error){return String(error)}},action)
+   assert.match(result,/暂未开放自动导出/)
+  }
+  assert.equal(gateDb.prepare('SELECT count(*) n FROM tasks').get().n,1)
+  assert.equal(JSON.parse(gateDb.prepare('SELECT payload FROM tasks').get().payload).status,'paused')
+ }finally{gateDb.close()}
  await app.evaluate(async({ipcMain,BrowserWindow})=>{
   const base={platform:'alibaba',account:'synthetic',from:'2026-01-01',to:'2026-01-31',status:'paused',createdAt:'2026-11-15',updatedAt:'2026-11-15',count:0,pages:0,message:'合成任务已暂停',cursor:'',exportedPath:''}
   globalThis.uiTasks=[{...base,id:'legacy'}, {...base,id:'official',mode:'official-export',from:'2026-02-01',to:'2026-02-28',officialExport:{phase:'waiting'}}]

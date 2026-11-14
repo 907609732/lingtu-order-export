@@ -108,9 +108,9 @@ onUnmounted(()=>{off?.();offUpdate?.()})
                 <button class="text-button" @click="action(()=>desk.finish(taskId))">结束读取</button>
               </div>
             </section><div class="button-row platform-actions"><button v-if="!pageOpen" class="secondary danger" :disabled="busy||!state||state.tasks.some(t=>t.status==='running')" :title="`清理 ${platform?.name} 的本机任务和订单记录，不删除已导出文件`" @click="clearPlatform">清理当前平台缓存</button><button class="secondary" @click="pageOpen?hidePage():openPage()" :disabled="busy">{{pageOpen?'返回导出台':platform?.mode==='proxy'?'打开平台页面':'登录 / 查看平台页'}}</button></div></div>
+            <p v-if="officialMode" class="official-mode-note" role="note">{{officialUnavailable?'官方页面导出流程尚待验证，暂未开放自动导出。所选月份与历史任务会保留。':'按所选月份自动查询、下载并核对；登录或验证时请在平台页完成后继续。范围完整性以核对结果为准。'}}</p>
           <div v-if="pageOpen" class="browser-placeholder"><p v-if="selected==='alibaba'">1688 使用淘宝／阿里账号登录，出现淘宝登录页属于官方跳转。登录后会返回 1688，再点击右上角“返回导出台”。</p><p v-else>请在下方的官方平台页面完成登录。完成后点击右上角“返回导出台”。</p></div>
           <template v-else>
-            <p v-if="officialMode" class="official-mode-note" role="note">{{officialUnavailable?'官方页面导出流程尚待验证，暂未开放自动导出。所选月份与历史任务会保留。':'按所选月份自动查询、下载并核对；登录或验证时请在平台页完成后继续。范围完整性以核对结果为准。'}}</p>
             <section v-if="platform?.mode==='proxy'" class="proxy-guide">
               <div><strong>微信小程序辅助采集</strong><span class="tag">{{state?.proxy.running?'监听已开启':'需要首次设置'}}</span><p>沿用综合版的本机采集方式。开启后在微信中打开对应平台的买家订单列表，已读取的订单会出现在这里。</p></div>
               <div class="button-row"><button class="secondary" :disabled="busy" @click="action(()=>desk.proxyStart(selected),'本机监听已开启，地址 127.0.0.1:17869。请完成下方证书与代理设置。')">开启辅助采集</button><button class="text-button" :disabled="!state?.proxy.running" @click="action(()=>desk.certificate())">打开本机证书</button><button class="text-button" @click="action(()=>desk.proxySettings())">打开代理设置</button></div>

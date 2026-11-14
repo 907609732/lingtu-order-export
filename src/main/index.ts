@@ -85,8 +85,8 @@ app.whenReady().then(async()=>{
   bind('openOrder',async(id:string,orderId:string)=>{idle();const order=store.orders(id).find(o=>o.id===orderId);if(!order)throw new Error('订单不存在');await collector.openOrder(order)})
   const taskAction=(id:string,action:string)=>diagnostics.event('task.action',{taskId:id,platform:store.get(id).platform,action})
   bind('pause',(id:string)=>{collector.stop(id);store.update(id,{status:'paused',message:'已暂停，当前结果已保存在本机'});taskAction(id,'pause');change()})
-  bind('resume',(id:string)=>{idle();store.update(id,{status:'running',message:'正在继续采集'});taskAction(id,'resume');run(id);change()})
-  bind('retry',(id:string)=>{idle();store.update(id,{status:'running',operation:'list',listOutcome:'pending',message:'正在重新检查未完成的订单范围',...(store.get(id).plan?{}:{cursor:''})});taskAction(id,'retry');run(id);change()})
+  bind('resume',(id:string)=>{idle();if(store.get(id).mode==='official-export')throw new Error('官方页面导出流程尚待验证，暂未开放自动导出');store.update(id,{status:'running',message:'正在继续采集'});taskAction(id,'resume');run(id);change()})
+  bind('retry',(id:string)=>{idle();if(store.get(id).mode==='official-export')throw new Error('官方页面导出流程尚待验证，暂未开放自动导出');store.update(id,{status:'running',operation:'list',listOutcome:'pending',message:'正在重新检查未完成的订单范围',...(store.get(id).plan?{}:{cursor:''})});taskAction(id,'retry');run(id);change()})
   bind('finish',(id:string)=>{collector.stop(id);store.update(id,{status:'partial',message:'已结束本次读取；仅代表已获取的记录，平台完整范围未自动验证'});taskAction(id,'finish');change()})
   bind('chooseDirectory',async()=>{collector.hide();const result=await dialog.showOpenDialog(win,{title:'选择订单导出目录',properties:['openDirectory','createDirectory'],defaultPath:store.setting('outputDir')||app.getPath('documents')});if(result.canceled)return store.setting('outputDir');store.setting('outputDir',result.filePaths[0]);change();return result.filePaths[0]})
   bind('export',async(input:ExportInput)=>{
