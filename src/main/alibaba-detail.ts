@@ -4,6 +4,23 @@ import {dateText} from '../core/values'
 import {CollectionError} from './collection-errors'
 
 const aliases={id:['订单编号','订单号'],receiver:['收货人姓名','收货人'],address:['收货地址'],phone:['联系手机','联系电话','收货电话'],logistics:['物流公司'],tracking:['运单号','物流单号','快递单号'],remark:['订单备注','买家留言'],paidAt:['付款时间','支付时间'],shippedAt:['发货时间'],completedAt:['完成时间','交易成功时间']} as const
+// Read loaded values only: formulas use cached results and hyperlinks use display text.
+function reportValue(value:unknown,id=false):string{
+ if(value===null||value===undefined)return ''
+ if(typeof value==='string')return value
+ if(typeof value==='number')return Number.isFinite(value)&&(!id||(Number.isSafeInteger(value)&&Math.abs(value)<1e15))?String(value):''
+ if(typeof value==='boolean')return id?'':String(value)
+ if(value instanceof Date)return id||!Number.isFinite(value.getTime())?'':value.toISOString().slice(0,19).replace('T',' ')
+ if(typeof value==='object'){
+  if('richText' in value&&Array.isArray(value.richText))return value.richText.map(part=>reportValue(part.text,id)).join('')
+  if('hyperlink' in value&&'text' in value)return reportValue(value.text,id)
+  if('formula' in value||'sharedFormula' in value)return 'result' in value?reportValue(value.result,id):''
+ }
+ return ''
+}
+function reportCellText(cell:ExcelJS.Cell,id=false):string{
+ try{return reportValue(cell.value,id).trim()}catch{throw new CollectionError('detail_report_format')}
+}
 export async function readAlibabaExport(buffer:Buffer,orders:Order[]):Promise<Order[]>{
  if(!buffer.length)throw new CollectionError('detail_report_empty')
  if(buffer.length>32*1024*1024)throw new CollectionError('detail_report_too_large')
@@ -16,10 +33,10 @@ export async function readAlibabaExport(buffer:Buffer,orders:Order[]):Promise<Or
  const expected=new Map(orders.map(o=>[o.id,o])),found=new Map<string,Map<string,Set<string>>>();let validHeader=false
  for(const sheet of workbook.worksheets){let columns=new Map<string,number[]>()
   sheet.eachRow(row=>{
-   if(!columns.size){const headers=new Map<string,number>();row.eachCell((cell,index)=>headers.set(cell.text.trim(),index));for(const [key,names] of Object.entries(aliases)){const indices=names.filter(n=>headers.has(n)).map(n=>headers.get(n)!);if(indices.length)columns.set(key,indices)}if(!columns.has('id'))columns=new Map();else validHeader=true;return}
-   const cell=row.getCell(columns.get('id')![0]);if(typeof cell.value==='number'&&!Number.isSafeInteger(cell.value))return
-   const id=cell.text.trim().replace(/^['’]/,'');if(!expected.has(id))return
-   const values=found.get(id)||new Map<string,Set<string>>();for(const [key,indices] of columns){if(key==='id')continue;const available=indices.map(index=>row.getCell(index).text.trim()).filter(Boolean);for(const value of key==='remark'?available:available.slice(0,1)){const set=values.get(key)||new Set<string>();set.add(value);values.set(key,set)}}found.set(id,values)
+   if(!columns.size){const headers=new Map<string,number>();row.eachCell((cell,index)=>headers.set(reportCellText(cell),index));for(const [key,names] of Object.entries(aliases)){const indices=names.filter(n=>headers.has(n)).map(n=>headers.get(n)!);if(indices.length)columns.set(key,indices)}if(!columns.has('id'))columns=new Map();else validHeader=true;return}
+   const cell=row.getCell(columns.get('id')![0])
+   const id=reportCellText(cell,true).replace(/^['’]/,'');if(!expected.has(id))return
+   const values=found.get(id)||new Map<string,Set<string>>();for(const [key,indices] of columns){if(key==='id')continue;const available=indices.map(index=>reportCellText(row.getCell(index))).filter(Boolean);for(const value of key==='remark'?available:available.slice(0,1)){const set=values.get(key)||new Set<string>();set.add(value);values.set(key,set)}}found.set(id,values)
   })
  }
  if(!validHeader)throw new CollectionError('detail_report_format')

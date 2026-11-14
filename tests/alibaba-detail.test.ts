@@ -22,3 +22,35 @@ it('distinguishes unmatched task orders from matched rows without detail fields'
  const empty=new ExcelJS.Workbook(),e=empty.addWorksheet('订单');e.addRow(['订单编号']);e.addRow([order.id])
  await expect(readAlibabaExport(Buffer.from(await empty.xlsx.writeBuffer()),[order])).rejects.toMatchObject({category:'detail_report_no_fields'})
 })
+
+async function linkedNumericReport(id: string | number, phone: number, linkCell = 'B2') {
+ const w=new ExcelJS.Workbook(),s=w.addWorksheet('订单');s.addRow(['订单编号','联系手机']);s.addRow([id,phone])
+ const {default:JSZip}=await import('jszip');const zip=await JSZip.loadAsync(await w.xlsx.writeBuffer())
+ const path='xl/worksheets/sheet1.xml';const xml=await zip.file(path)!.async('string')
+ zip.file(path,xml.replace('</sheetData>','</sheetData><hyperlinks><hyperlink ref="'+linkCell+'" r:id="rId1"/></hyperlinks>'))
+ zip.file('xl/worksheets/_rels/sheet1.xml.rels','<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.invalid/" TargetMode="External"/></Relationships>')
+ return zip.generateAsync({type:'nodebuffer'})
+}
+it('reads numeric hyperlink display text without assuming ExcelJS text is a string',async()=>{
+ const buffer=await linkedNumericReport(order.id,13800000000)
+ const w=new ExcelJS.Workbook();await w.xlsx.load(buffer as any);expect(typeof w.worksheets[0].getCell('B2').text).toBe('number')
+ const [result]=await readAlibabaExport(buffer,[order]);expect(result.phone).toBe('13800000000')
+})
+it('refuses numeric IDs beyond Excel precision including hyperlink display values',async()=>{
+ for(const id of [1234567890123456,123456789012345680]){
+  for(const linkCell of ['A2','B2']){
+   const buffer=await linkedNumericReport(id,13800000000,linkCell)
+   await expect(readAlibabaExport(buffer,[{...order,id:String(id)}])).rejects.toMatchObject({category:'detail_report_no_match'})
+  }
+ }
+})
+it('preserves exact text IDs and rich text, cached formulas, empty values and dates',async()=>{
+ const w=new ExcelJS.Workbook(),s=w.addWorksheet('订单');s.addRow(['订单编号','收货人','联系手机','联系电话','买家留言','付款时间'])
+ s.addRow([{text:order.id,hyperlink:'https://example.invalid/'},{richText:[{text:'合成'},{text:'人'}]},null,{formula:'1+1',result:13800000000},{formula:'"cached"',result:'缓存留言'},new Date('2026-10-02T01:02:03Z')])
+ const [result]=await readAlibabaExport(Buffer.from(await w.xlsx.writeBuffer()),[order]);expect(result.id).toBe(order.id);expect(result.receiver).toBe('合成人');expect(result.phone).toBe('13800000000');expect(result.remark).toBe('缓存留言');expect(result.paidAt).toBe('2026-10-02 01:02:03')
+})
+
+it('does not match an imprecise numeric cached formula ID',async()=>{
+ const w=new ExcelJS.Workbook(),s=w.addWorksheet('订单');s.addRow(['订单编号','收货地址']);s.addRow([{formula:'1',result:1234567890123456},'合成地址'])
+ await expect(readAlibabaExport(Buffer.from(await w.xlsx.writeBuffer()),[{...order,id:'1234567890123456'}])).rejects.toMatchObject({category:'detail_report_no_match'})
+})
