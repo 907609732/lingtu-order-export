@@ -8,10 +8,11 @@ for(const mode of ['iframe','main','preserve','loop']){
  const app=await electron.launch({executablePath:resolve('node_modules/electron/dist/electron.exe'),args:['.'],env,timeout:45000})
  try{
   const p=await app.firstWindow();await p.waitForFunction(()=>!!window.desk)
+  await app.evaluate(({BrowserWindow})=>{const win=BrowserWindow.getAllWindows()[0];win.on('show',()=>win.hide());win.hide()})
   await app.evaluate(({session},mode)=>{
-   globalThis.loginVisits=0
+   globalThis.loginVisits=0;globalThis.loginUserAgents=[]
    session.fromPartition('persist:orderdesk-alibaba').protocol.handle('https',req=>{
-    const u=new URL(req.url);let body='合成订单页面'
+    const u=new URL(req.url);let body='合成订单页面';const ua=req.headers.get('user-agent');if(ua)globalThis.loginUserAgents.push(ua)
     if(u.hostname==='air.1688.com'){
      globalThis.loginVisits++
      if(mode==='preserve')body='<iframe src="https://login.taobao.com/member/login.jhtml"></iframe><iframe src="https://www.taobao.com/markets/verify"></iframe>'
@@ -22,6 +23,8 @@ for(const mode of ['iframe','main','preserve','loop']){
    })
   },mode)
   await p.evaluate(()=>window.desk.login('alibaba'))
+  const userAgents=await app.evaluate(({webContents})=>[...globalThis.loginUserAgents,...webContents.getAllWebContents().filter(w=>w.getURL().startsWith('https://')).map(w=>w.getUserAgent())])
+  assert.ok(userAgents.length);for(const ua of userAgents){assert.match(ua,/Chrome\/\d+/);assert.doesNotMatch(ua,/Electron\/|电商平台采购订单导出/)}
   if(mode==='preserve'){
    await expect.poll(()=>app.evaluate(({webContents})=>webContents.getAllWebContents().find(w=>w.getURL().includes('air.1688.com'))?.mainFrame.framesInSubtree.map(f=>f.url).join()),{timeout:10000}).toContain('markets/verify')
    await p.waitForTimeout(300);assert.equal(await app.evaluate(()=>globalThis.loginVisits),1)

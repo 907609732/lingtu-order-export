@@ -18,7 +18,7 @@ import { normalizePddDetail } from '../core/pdd-normalize'
 import {taobaoDetailUrl,readTaobaoDetailPage,mergeTaobaoVisibleDetail} from './taobao-detail'
 import {platformDetailUrl,mergePlatformVisibleDetail} from './platform-detail'
 import {readAlibabaExport,alibabaExportUrl} from './alibaba-detail'
-import {isAlibabaLoginLanding} from './platform-login'
+import {isAlibabaLoginLanding,alibabaBrowserUserAgent} from './platform-login'
 import {JdExportError,clickJdExportAction} from './jd-export'
 import {downloadJdExport} from './jd-export-download'
 import {collectJdExportPages,validateJdExportPage,type JdExportPage} from './jd-export-pages'
@@ -128,6 +128,7 @@ export class Collector {
     const prior=this.views.get(id);if(prior&&!prior.webContents.isDestroyed())return prior
     const ses=session.fromPartition(`persist:orderdesk-${id}`);ses.setPermissionRequestHandler((_w,_p,done)=>done(false))
     const view=new WebContentsView({webPreferences:{session:ses,nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true}})
+    if(id==='alibaba')view.webContents.setUserAgent(alibabaBrowserUserAgent(view.webContents.getUserAgent()))
     let loginReturns=0,returningFromLogin=false
     // 1688 embeds its Taobao login page; the post-login error can remain inside that iframe.
     view.webContents.on('did-frame-navigate',(_event,url)=>{
