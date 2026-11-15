@@ -261,8 +261,7 @@ export class Collector {
         return key
       }
       const guard=async()=>{assertActive();await account();assertActive()}
-      const checkpoint=this.store.get(task.id).officialExport
-      if(checkpoint?.submission!=='accepted'&&checkpoint?.submission!=='unknown'){
+      const resetPage=async()=>{
         await guard()
         // A reused official page can still show the previous task's record dialog.
         // Start a new application from a fresh page instead of clicking through stale overlays.
@@ -277,6 +276,8 @@ export class Collector {
         })
         await guard()
       }
+      const checkpoint=this.store.get(task.id).officialExport
+      if(checkpoint?.submission!=='accepted'&&checkpoint?.submission!=='unknown')await resetPage()
       // The official page ignores synthetic DOM events, so every primary control is clicked with real input.
       const officialPage={
         executeJavaScript:async(code:string)=>{await guard();const result=await view.webContents.executeJavaScript(code);await guard();return result},
@@ -298,7 +299,7 @@ export class Collector {
       const officialSegments=(task.plan?.segments?.map(({from,to})=>({from,to}))||[]).sort((a,b)=>a.from.localeCompare(b.from))
       const officialRange=officialSegments.length?{from:officialSegments[0].from,to:officialSegments[officialSegments.length-1].to}:{from:task.from,to:task.to}
       await runAlibabaOfficialExport(createAlibabaOfficialDriver(officialPage,{
-        guard,signal:abort.signal,
+        guard,signal:abort.signal,resetPage,
         beforeSubmit:async baseline=>{assertActive();this.store.update(task.id,{officialExport:{...this.store.get(task.id).officialExport!,baseline}});this.changed()},
         // Preserve a confirmed token even if Stop won the race immediately after the real click.
         onSubmitted:async submitted=>{this.store.update(task.id,{officialExport:{...this.store.get(task.id).officialExport!,phase:'waiting',submission:'accepted',token:submitted.token},...(!this.stopped.has(task.id)?{message:'正在等待官方报表生成'}:{})});this.store.setting('officialSubmitAt',new Date().toISOString());this.changed()}

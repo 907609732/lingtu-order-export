@@ -14,7 +14,7 @@ export interface OfficialRecordRow {applied:string;finished:string;status:string
 export interface OfficialPoint {x:number;y:number}
 export type OfficialTarget='select'|'dateStart'|'dateEnd'|'search'|'export'|'generate'|'viewRecords'|'refresh'
 export interface OfficialPageAdapter {executeJavaScript(code:string):Promise<unknown>;click?(x:number,y:number):Promise<void>}
-export interface OfficialDriverOptions {submitPollMs?:number;recordPollMs?:number;submitAttempts?:number;recordAttempts?:number;settleMs?:number;guard?:()=>Promise<void>;signal?:AbortSignal;beforeSubmit?:(baseline:string[])=>void|Promise<void>;onSubmitted?:(result:OfficialTokenParts&{token:string})=>void|Promise<void>}
+export interface OfficialDriverOptions {submitPollMs?:number;recordPollMs?:number;submitAttempts?:number;recordAttempts?:number;settleMs?:number;guard?:()=>Promise<void>;signal?:AbortSignal;resetPage?:()=>Promise<void>;beforeSubmit?:(baseline:string[])=>void|Promise<void>;onSubmitted?:(result:OfficialTokenParts&{token:string})=>void|Promise<void>}
 const tokenSeparator='~'
 /** The token carries its own range so a resumed task can still verify the record without driver memory. */
 export function encodeOfficialToken(parts:OfficialTokenParts):string{return [parts.from,parts.to,String(parts.total),parts.appliedAt,...(parts.href?[encodeURIComponent(parts.href)]:[])].join(tokenSeparator)}
@@ -259,6 +259,18 @@ export function createAlibabaOfficialDriver(contents:OfficialPageAdapter,options
    if(!dialog)throw new Error('官方导出确认弹窗未出现，已停止且未提交导出')
    const baseline=(await readRows()).map(row=>row.applied)
    assertUnique(baseline)
+   if(options.resetPage){
+    // Vendor record dialogs can have inaccessible/changed close icons. Navigate back
+    // through the same guarded official entry instead of guessing a click target.
+    const expected={...last}
+    await guard();await options.resetPage();await guard()
+    const restored=await createAlibabaOfficialDriver(contents,options).search(expected)
+    if(restored.total!==expected.total)throw new Error('返回官方订单页后订单数量发生变化，未提交报表，请继续重试')
+    if(!await tap('export'))throw new Error('返回官方订单页后未找到导出入口，未提交新报表')
+    let ready=false
+    for(let attempt=0;attempt<80&&!ready;attempt++){await wait(250);ready=!!(await run<OfficialPoint|null>(coordsScript('generate')))}
+    if(!ready)throw new Error('返回官方订单页后未出现生成报表弹窗，未提交新报表')
+   }else{
    // Return through a visible confirmed close control; never click the backdrop or guess coordinates.
    for(let depth=0;depth<4;depth++){
     const state=await run<{table?:boolean;dialog?:boolean}>(LIST_STATE)
@@ -269,6 +281,7 @@ export function createAlibabaOfficialDriver(contents:OfficialPageAdapter,options
    }
    if((await run<{table?:boolean}>(LIST_STATE))?.table)throw new Error('导出记录弹窗未确认关闭，未提交新报表')
    if(!await run<OfficialPoint|null>(coordsScript('generate'))){if(!await tap('export'))throw new Error('无法返回生成报表弹窗');await wait(settleMs)}
+   }
    await guard();await options.beforeSubmit?.([...baseline]);await guard()
    if(!await tap('generate',0,beforeClick))throw new Error('弹窗中未找到「生成新报表」，提交结果未知，请先在导出记录中确认')
    return reconcile(last,last.total,baseline)

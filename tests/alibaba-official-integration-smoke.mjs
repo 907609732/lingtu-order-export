@@ -24,7 +24,8 @@ function fixture(){
  button('搜索',dom,()=>{})
  const total=document.createElement('span');total.textContent='共3条';dom.append(total)
  const records=[{applied:'2026-01-01 00:00:00',href:'https://trade.1688.com/fixture/stale.xlsx'}]
- const makeDialog=()=>{const d=document.createElement('div');d.className='q-dialog';dom.append(d);button('关闭',d,()=>d.remove());return d}
+ // No recognizable close button: production must return through its guarded navigation.
+ const makeDialog=()=>{const d=document.createElement('div');d.className='q-dialog';dom.append(d);return d}
  const showRecords=()=>{const d=makeDialog();const render=()=>{d.querySelectorAll('q-table-tr,q-table-th').forEach(e=>e.remove());const h=document.createElement('q-table-th');h.textContent='申请时间';d.append(h);for(const r of records){const row=document.createElement('q-table-tr');row.className='export-record-tr';for(const t of [r.applied,r.applied,'成功']){const c=document.createElement('q-table-td');c.textContent=t;row.append(c)}const a=document.createElement('a');a.href=r.href;a.target='_blank';a.textContent='下载';a.onclick=()=>window.downloaded.push(r.href);row.append(a);d.append(row)}};button('刷新',d,render);render()}
  button('导出当前条件',dom,()=>{const d=makeDialog();d.append(document.createTextNode('批量导出'));button('查看过往导出报表',d,showRecords);button('生成新报表',d,()=>{window.generated++;if(window.fixtureMode!=='stale')records.push({applied:'2026-11-15 12:00:'+String(window.generated).padStart(2,'0'),href:'https://trade.1688.com/fixture/current.xlsx'});d.remove();showRecords()})})
 }
@@ -33,6 +34,18 @@ const executable=process.argv[2]?resolve(process.argv[2]):resolve('node_modules/
 const app=await electron.launch({executablePath:executable,args:process.argv[2]?[]:['.'],env,timeout:45000})
 try{
  const page=await app.firstWindow();await page.waitForFunction(()=>!!window.desk)
+ await expect(page.getByRole('button',{name:'① 选择采集时间',exact:true})).toBeEnabled()
+ const finish=async id=>{
+  for(let retry=0;retry<3;retry++){
+   await expect.poll(async()=>(await page.evaluate(()=>window.desk.state())).tasks.find(t=>t.id===id).status,{timeout:90000}).not.toBe('running')
+   const task=(await page.evaluate(()=>window.desk.state())).tasks.find(t=>t.id===id)
+   if(task.status!=='paused'||!/应用已失去焦点/.test(task.message)||retry===2)return task
+   // A real desktop user can move focus during this long native-input fixture.
+   // Exercise the supported focus-pause resume instead of suppressing its guard.
+   await app.evaluate(({BrowserWindow})=>{const win=BrowserWindow.getAllWindows()[0];win.show();win.focus()})
+   await page.evaluate(id=>window.desk.resume(id),id)
+  }
+ }
  await app.evaluate(async({session},{html,xlsx})=>{const s=session.fromPartition('persist:orderdesk-alibaba');await s.cookies.set({url:'https://air.1688.com',name:'unb',value:'synthetic-official'});globalThis.fixtureRequests=[];s.protocol.handle('https',req=>{globalThis.fixtureRequests.push(req.url);if(new URL(req.url).pathname==='/fixture/current.xlsx')return new Response(Buffer.from(xlsx,'base64'),{headers:{'content-type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','content-disposition':'attachment; filename="current.xlsx"'}});return new Response(html,{headers:{'content-type':'text/html;charset=utf-8'}})})},{html,xlsx})
  const input={platform:'alibaba',mode:'official-export',from:'2026-08-01',to:'2026-10-31',plan:{granularity:'month',segments:[{from:'2026-08-01',to:'2026-08-31'},{from:'2026-10-01',to:'2026-10-31'}]}}
  await page.evaluate(async()=>{await window.desk.login('alibaba','ordinary');await window.desk.hidePage()})
@@ -44,8 +57,7 @@ try{
  assert.equal((await page.evaluate(()=>window.desk.state())).tasks.find(t=>t.id===paused.id).officialExport.submission,'prepared')
  await page.evaluate(id=>window.desk.resume(id),paused.id)
  const task=paused
- await expect.poll(async()=>{const t=(await page.evaluate(()=>window.desk.state())).tasks.find(t=>t.id===task.id);return t?.status==='running'?'running':t},{timeout:90000}).not.toBe('running')
- const done=(await page.evaluate(()=>window.desk.state())).tasks.find(t=>t.id===task.id)
+ const done=await finish(task.id)
  assert.equal(done.listOutcome,'complete',JSON.stringify(done))
  assert.equal(done.officialExport.phase,'complete');assert.equal(done.count,2)
  assert.deepEqual((await page.evaluate(id=>window.desk.orders(id),task.id)).map(o=>o.id).sort(),['900000000000001','900000000000003'])
@@ -53,8 +65,7 @@ try{
  assert.equal(evidence.dom.generated,1);assert.deepEqual(evidence.dom.downloaded,['https://trade.1688.com/fixture/current.xlsx']);assert.equal(evidence.requests.some(u=>u.endsWith('/stale.xlsx')),false)
  const db=new DatabaseSync(join(root,'orders.sqlite'));db.prepare('DELETE FROM settings WHERE key=?').run('officialSubmitAt');db.close()
  const zero=await page.evaluate(input=>window.desk.start(input),{platform:'alibaba',mode:'official-export',from:'2026-11-01',to:'2026-11-15',plan:{granularity:'month',segments:[{from:'2026-11-01',to:'2026-11-15'}]}})
- await expect.poll(async()=>(await page.evaluate(()=>window.desk.state())).tasks.find(t=>t.id===zero.id).status,{timeout:90000}).not.toBe('running')
- const zeroDone=(await page.evaluate(()=>window.desk.state())).tasks.find(t=>t.id===zero.id)
+ const zeroDone=await finish(zero.id)
  assert.equal(zeroDone.listOutcome,'complete',JSON.stringify(zeroDone));assert.equal(zeroDone.count,0);assert.equal(zeroDone.officialExport.phase,'complete')
  await page.screenshot({path:join(root,'official-integration.png')})
  console.log(JSON.stringify({passed:true,root,defaultGate:true,realDriverDOM:true,realNativeDownload:true,nonContiguousMonths:true,zeroSelectedMonth:true,pauseBeforeGenerate:true,priorOrdinaryView:true,staleRecordNotDownloaded:true,evidence}))

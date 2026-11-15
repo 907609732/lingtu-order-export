@@ -2,6 +2,26 @@ import {it,expect} from 'vitest'
 import {createAlibabaOfficialDriver,decodeOfficialToken,encodeOfficialToken,officialFilename} from '../src/main/alibaba-official-page'
 const range={from:'2026-10-01',to:'2026-10-31'}
 const fast={submitPollMs:1,recordPollMs:1,submitAttempts:3,recordAttempts:3,settleMs:1}
+
+it('returns from records via guarded page reset when no recognizable modal close control exists',async()=>{
+ let reads=0,resets=0,marked=false
+ const old='2026-11-15 03:56:29',fresh='2026-11-15 16:02:11'
+ const {contents}=makeDriver(kind=>kind==='liststate'?{table:true,dialog:false}:kind==='records'?{rows:(++reads===1?[old]:[old,fresh]).map(applied=>({applied,href:'',status:'导出中'}))}:healthy(kind))
+ const driver=createAlibabaOfficialDriver(contents,{...fast,resetPage:async()=>{resets++}} as any)
+ await driver.search(range)
+ const result=await driver.submit(async()=>{expect(resets).toBe(1);marked=true})
+ expect(resets).toBe(1);expect(marked).toBe(true);expect(decodeOfficialToken(result.token)?.appliedAt).toBe(fresh)
+})
+it('never generates after cancellation or changed totals while returning from the record page',async()=>{
+ for(const cancelled of [true,false]){
+  const signal=new AbortController();let totals=0,marked=false
+  const {contents}=makeDriver(kind=>kind==='records'?{rows:[]}:kind==='total'?{total:++totals===1?24:25}:healthy(kind))
+  const driver=createAlibabaOfficialDriver(contents,{...fast,signal:signal.signal,resetPage:async()=>{if(cancelled)signal.abort()}})
+  await driver.search(range)
+  await expect(driver.submit(()=>{marked=true})).rejects.toThrow(cancelled?/暂停/:/数量发生变化/)
+  expect(marked).toBe(false)
+ }
+})
 type Kind='install'|'probe'|'state'|'coords'|'pick'|'range'|'list'|'total'|'search'|'records'|'now'|'dialog'|'liststate'|'unknown'
 const coords={select:{x:1,y:1},dateStart:{x:1,y:1},dateEnd:{x:1,y:1},search:{x:1,y:1},export:{x:1,y:1},generate:{x:1,y:1},viewRecords:null,refresh:null}
 function classify(code:string):Kind{
