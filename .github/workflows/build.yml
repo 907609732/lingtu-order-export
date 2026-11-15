@@ -46,6 +46,12 @@ jobs:
         run: node tests/primary-resume-smoke.mjs
       - name: Verify isolated 1688 official-mode preparation UI
         run: node tests/alibaba-official-ui-smoke.mjs
+      - name: Verify default-enabled official export and explicit disable
+        run: node tests/alibaba-official-enabled-smoke.mjs
+      - name: Verify cross-year official month selection
+        run: node tests/alibaba-official-cross-year-smoke.mjs
+      - name: Verify official export download and import with synthetic data
+        run: node tests/alibaba-official-integration-smoke.mjs
       - name: Verify 1688 login iframe recovery
         run: node tests/platform-login-smoke.mjs
       - name: Verify single-instance update safety

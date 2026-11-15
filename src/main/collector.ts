@@ -1,4 +1,5 @@
-import { BrowserWindow, WebContentsView, session } from 'electron'
+import { BrowserWindow, WebContentsView, session, app } from 'electron'
+import { join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { createHash } from 'node:crypto'
 import type { CollectionMode, Order, PlatformId, Task } from '../shared/types'
@@ -24,8 +25,9 @@ import {JdExportError,clickJdExportAction} from './jd-export'
 import {downloadJdExport} from './jd-export-download'
 import {collectJdExportPages,validateJdExportPage,type JdExportPage} from './jd-export-pages'
 import {runAlibabaOfficialExport} from './alibaba-official-export'
-import {createAlibabaOfficialDriver} from './alibaba-official-page'
-import {readAlibabaOfficialReport} from './alibaba-official-report'
+import {createAlibabaOfficialDriver,triggerAlibabaOfficialDownload} from './alibaba-official-page'
+import {downloadAlibabaOfficialReport} from './alibaba-official-download'
+import {completeOfficialImportPlan,readAlibabaOfficialReport} from './alibaba-official-report'
 import type {AlibabaOfficialCheckpoint} from '../shared/types'
 import {RunRegistry,type RunLease} from './run-registry'
 export class Collector {
@@ -38,6 +40,7 @@ export class Collector {
   private commit(task:Task,orders:Order[]){if(this.stopped.has(task.id)||!this.registry.valid(this.taskLeases.get(task)))throw new Error('采集已暂停');return this.store.add(task.id,orders)}
   private progress=new Map<string,ExecutionProgress>()
   private jdDownloads=new Map<string,AbortController>()
+  private officialRuns=new Map<string,AbortController>()
   private initializing=new Map<PlatformId,{mode:CollectionMode;promise:Promise<WebContentsView>}>()
   private displayGeneration=0
   private viewModes=new Map<PlatformId,CollectionMode>()
@@ -153,17 +156,18 @@ export class Collector {
     this.hide();this.current=view;this.win.contentView.addChildView(view);this.layout()
   }
 
-  async ensure(id:PlatformId,mode:CollectionMode='ordinary'):Promise<WebContentsView>{
+  async ensure(id:PlatformId,mode:CollectionMode='ordinary',owner?:RunLease):Promise<WebContentsView>{
     const pending=this.initializing.get(id);if(pending){if(pending.mode!==mode)throw new Error('平台页面正在初始化，请稍后切换模式');return pending.promise}
-    const promise=this.createView(id,mode);this.initializing.set(id,{mode,promise});try{return await promise}finally{if(this.initializing.get(id)?.promise===promise)this.initializing.delete(id)}
+    const promise=this.createView(id,mode,owner);this.initializing.set(id,{mode,promise});try{return await promise}finally{if(this.initializing.get(id)?.promise===promise)this.initializing.delete(id)}
   }
-  private async createView(id:PlatformId,mode:CollectionMode):Promise<WebContentsView>{
+  private async createView(id:PlatformId,mode:CollectionMode,owner?:RunLease):Promise<WebContentsView>{
     if(mode==='official-export'&&id!=='alibaba')throw new Error('官方页面导出仅适用于1688')
     const prior=this.views.get(id)
     if(prior&&!prior.webContents.isDestroyed()){
       if((this.viewModes.get(id)||'ordinary')===mode)return prior
-      if(this.registry.leases.has(id))throw new Error('请先暂停当前平台任务，再切换采集模式')
-      if(this.current===prior)this.hide()
+      const active=this.registry.leases.get(id)
+      if(active&&(active!==owner||!this.registry.valid(owner)))throw new Error('请先暂停当前平台任务，再切换采集模式')
+      if(this.current===prior){if(owner){this.win.contentView.removeChildView(prior);this.current=undefined}else this.hide()}
       if(prior.webContents.debugger.isAttached())prior.webContents.debugger.detach()
       prior.webContents.close();this.views.delete(id)
     }
@@ -205,7 +209,7 @@ export class Collector {
       this.store.update(task.id,{pages:task.pages+1,message:unknown?`${unknown} 笔订单缺少日期，未混入所选日期范围`:`已读取订单，当前范围内 ${this.store.get(task.id).count} 笔`});if(count||unknown)this.changed()
     }catch(error){this.diagnostics.event('collector.parse_failed',{platform,taskId:task.id},error,'warn')}
   }
-  stop(id:string){this.jdDownloads.get(id)?.abort();this.diagnostics.event('collector.stop',{taskId:id});this.progress.get(id)?.close();this.progress.delete(id);this.stopped.add(id);this.registry.stop(id);this.changed()}
+  stop(id:string){this.officialRuns.get(id)?.abort();this.jdDownloads.get(id)?.abort();this.diagnostics.event('collector.stop',{taskId:id});this.progress.get(id)?.close();this.progress.delete(id);this.stopped.add(id);this.registry.stop(id);this.changed()}
   async run(task:Task):Promise<void>{
     if(task.mode==='official-export')return this.runOfficial(task)
     if(task.operation==='details')return this.enrichDetails(task)
@@ -232,10 +236,23 @@ export class Collector {
     this.assertIdle(task.platform)
     const lease=this.registry.acquire(task.platform,task.id);this.taskLeases.set(task,lease);this.runs.add(task.id);this.stopped.delete(task.id)
     this.store.update(task.id,{status:'running',officialExport:task.officialExport||{phase:'search',segmentIndex:0},message:'正在检查官方页面导出支持情况'});this.changed()
+    const abort=new AbortController();this.officialRuns.set(task.id,abort)
+    const assertActive=()=>{if(abort.signal.aborted||this.stopped.has(task.id)||!this.registry.valid(lease))throw new Error('官方导出已暂停，断点已保留')}
     try{
-      const view=await this.ensure('alibaba','official-export')
+      // The platform only accepts one export application per five minutes; refuse locally instead of hitting its limit.
+      const lastSubmit=this.store.setting('officialSubmitAt')
+      if(!task.officialExport?.token&&lastSubmit){
+        const elapsed=Date.now()-new Date(lastSubmit).getTime()
+        if(Number.isFinite(elapsed)&&elapsed>=0&&elapsed<5*60*1000)throw new Error(`官方导出通道需要间隔 5 分钟（上次申请在 ${Math.max(1,Math.round(elapsed/60000))} 分钟前），请稍后再继续`)
+      }
+      assertActive();const generation=this.displayGeneration
+      const view=await this.ensure('alibaba','official-export',lease);assertActive()
+      if(generation!==this.displayGeneration)throw new Error('平台显示已切换，请打开1688官方导出页面后继续')
+      if(this.current!==view){this.hide();this.current=view;this.win.contentView.addChildView(view);this.layout()}
       const account=async()=>{
+        assertActive()
         const current=this.store.get(task.id),cookies=await view.webContents.session.cookies.get({url:platformById('alibaba').url})
+        assertActive()
         const identity=current.accountCookie?cookies.find(c=>c.name===current.accountCookie&&c.value):['unb','last_mid'].map(name=>cookies.find(c=>c.name===name&&c.value)).find(Boolean)
         if(!identity)throw new CollectionError('login_or_verification')
         const key=createHash('sha256').update('orderdesk:alibaba:'+identity.name+':'+identity.value).digest('hex')
@@ -243,24 +260,74 @@ export class Collector {
         if(!current.accountKey)this.store.update(task.id,{accountKey:key,accountCookie:identity.name})
         return key
       }
-      await runAlibabaOfficialExport(createAlibabaOfficialDriver(view.webContents),{
-        ranges:task.plan?.segments.map(({from,to})=>({from,to}))||[{from:task.from,to:task.to}],account,
+      const guard=async()=>{assertActive();await account();assertActive()}
+      const checkpoint=this.store.get(task.id).officialExport
+      if(checkpoint?.submission!=='accepted'&&checkpoint?.submission!=='unknown'){
+        await guard()
+        // A reused official page can still show the previous task's record dialog.
+        // Start a new application from a fresh page instead of clicking through stale overlays.
+        await new Promise<void>((resolve,reject)=>{
+          let settled=false
+          const finish=(error?:unknown)=>{if(settled)return;settled=true;clearTimeout(timer);abort.signal.removeEventListener('abort',cancel);error?reject(error):resolve()}
+          const cancel=()=>finish(new Error('官方导出已暂停，断点已保留'))
+          const timer=setTimeout(()=>finish(new CollectionError('timeout')),20000)
+          abort.signal.addEventListener('abort',cancel,{once:true})
+          if(abort.signal.aborted){cancel();return}
+          void view.webContents.loadURL(platformById('alibaba').url).then(()=>finish(),error=>finish(error?.errno===-3||error?.code==='ERR_ABORTED'?new Error('官方页面导航中断，请继续任务重试'):new CollectionError('network')))
+        })
+        await guard()
+      }
+      // The official page ignores synthetic DOM events, so every primary control is clicked with real input.
+      const officialPage={
+        executeJavaScript:async(code:string)=>{await guard();const result=await view.webContents.executeJavaScript(code);await guard();return result},
+        click:async(x:number,y:number)=>{
+          await guard()
+          // Only attach while this view is already selected; never steal another platform's display.
+          if(this.current!==view)throw new Error('请先打开1688官方导出页面后继续')
+          if(!this.win.isFocused())throw new Error('应用已失去焦点，请回到导出窗口后继续')
+          assertActive();const wc=view.webContents
+          wc.focus()
+          wc.sendInputEvent({type:'mouseMove',x,y})
+          wc.sendInputEvent({type:'mouseDown',x,y,button:'left',clickCount:1})
+          wc.sendInputEvent({type:'mouseUp',x,y,button:'left',clickCount:1})
+          await delay(150);await guard()
+        }
+      }
+      // The platform export ignores the date filter and always returns every order, so one export covers all selected months
+      // and the split happens locally against the report's own 下单时间 column.
+      const officialSegments=(task.plan?.segments?.map(({from,to})=>({from,to}))||[]).sort((a,b)=>a.from.localeCompare(b.from))
+      const officialRange=officialSegments.length?{from:officialSegments[0].from,to:officialSegments[officialSegments.length-1].to}:{from:task.from,to:task.to}
+      await runAlibabaOfficialExport(createAlibabaOfficialDriver(officialPage,{
+        guard,signal:abort.signal,
+        beforeSubmit:async baseline=>{assertActive();this.store.update(task.id,{officialExport:{...this.store.get(task.id).officialExport!,baseline}});this.changed()},
+        // Preserve a confirmed token even if Stop won the race immediately after the real click.
+        onSubmitted:async submitted=>{this.store.update(task.id,{officialExport:{...this.store.get(task.id).officialExport!,phase:'waiting',submission:'accepted',token:submitted.token},...(!this.stopped.has(task.id)?{message:'正在等待官方报表生成'}:{})});this.store.setting('officialSubmitAt',new Date().toISOString());this.changed()}
+      }),{
+        ranges:[officialRange],account,
         checkpoint:()=>this.store.get(task.id).officialExport,
-        save:value=>{this.store.update(task.id,{officialExport:value as AlibabaOfficialCheckpoint});this.changed()},
-        stopped:()=>this.stopped.has(task.id),
-        // No guessed click or URL fallback. Enable only after the live record/download contract is verified.
-        download:async()=>{throw new Error('官方导出记录与下载契约尚未验证，自动下载未开放')},
+        save:value=>{const messages={search:'正在设置官方导出时间',submit:'正在申请官方报表',waiting:'正在等待官方报表生成',download:'正在下载官方报表',import:'正在核对并导入所选月份',complete:'所选月份已完成本地导入'};this.store.update(task.id,{officialExport:value as AlibabaOfficialCheckpoint,...(!this.stopped.has(task.id)?{message:messages[value.phase]}:{})});if(value.phase==='waiting'||value.phase==='submit'&&value.submission==='unknown')this.store.setting('officialSubmitAt',new Date().toISOString());this.changed()},
+        stopped:()=>abort.signal.aborted||this.stopped.has(task.id)||!this.registry.valid(lease),
+        // Only the exact record link returned by the verified driver is clicked; the download itself is re-checked by URL, account and size.
+        download:async record=>{
+          const trigger=(async()=>{await guard();return triggerAlibabaOfficialDownload(officialPage,record.url,{guard,signal:abort.signal})}) as unknown as () => Promise<void>
+          const result=await downloadAlibabaOfficialReport(view.webContents,record,trigger,{directory:join(app.getPath('userData'),'official-reports'),assertAccount:guard,signal:abort.signal})
+          await guard();return result
+        },
         import:async(bytes,range,total)=>{
           await account()
-          const result=await readAlibabaOfficialReport(bytes,{account:task.account,...range,expectedTotal:total})
-          if(result.audit.accountMismatch||result.audit.conflicts.length||result.audit.outOfRange||result.audit.uniqueOrders!==total)throw new Error('官方报表账号、范围或数量核对未通过，未入库')
-          await account();if(this.stopped.has(task.id))throw new Error('官方导出已暂停，未入库')
+          if(!bytes?.length)throw new Error('官方报表为空，未入库')
+          const magic=bytes.subarray(0,2).toString('latin1')
+          if(magic!=='PK')throw new Error(`官方报表不是 xlsx（前两字节 ${JSON.stringify(magic)}，${bytes.length} 字节），未入库`)
+          const result=await readAlibabaOfficialReport(bytes,{account:task.account,...range,segments:officialSegments.length?officialSegments:undefined,expectedTotal:officialSegments.length?undefined:total})
+          if(result.audit.accountMismatch||result.audit.conflicts.length)throw new Error(`官方报表核对未通过（字段冲突 ${result.audit.conflicts.length}，账号不符 ${result.audit.accountMismatch}），未入库`)
+          result.audit.warnings.push('官方导出忽略日期筛选，报表为全量数据，已按所选月份在本地切分；范围完整性仍以核对结果为准')
+          await guard()
           this.commit(task,result.orders);this.changed();return result.audit
         }
       })
-      if(!this.stopped.has(task.id))this.store.update(task.id,{status:'partial',listOutcome:'interrupted',message:'报表已导入，官方范围完整性仍待验收'})
-    }catch(error){if(!this.stopped.has(task.id))this.store.update(task.id,{status:error instanceof CollectionError&&error.category==='login_or_verification'?'needs_login':'paused',listOutcome:'interrupted',message:error instanceof Error?error.message:'官方报表流程已暂停，尚未完成验收'})}
-    finally{this.runs.delete(task.id);this.registry.release(lease);this.changed()}
+      assertActive();this.store.update(task.id,{plan:completeOfficialImportPlan(this.store.get(task.id).plan,this.store.orders(task.id)),status:this.store.get(task.id).count?'partial':'completed',listOutcome:'complete',message:'官方报表已按所选月份完成本地导入；平台范围完整性仍待独立核对'})
+    }catch(error){if(!this.stopped.has(task.id)&&this.registry.valid(lease))this.store.update(task.id,{status:error instanceof CollectionError&&error.category==='login_or_verification'?'needs_login':'paused',listOutcome:'interrupted',message:error instanceof Error?error.message:'官方报表流程已暂停，尚未完成验收'})}
+    finally{const officialView=this.views.get('alibaba');if(this.current===officialView&&this.viewModes.get('alibaba')==='official-export')this.hide();this.officialRuns.delete(task.id);this.runs.delete(task.id);this.registry.release(lease);this.changed()}
   }
   private async runPlan(task:Task,view:WebContentsView){
     const methods={taobao:this.runTaobao,alibaba:this.runAlibaba,jd:this.runJD,pdd:this.runPdd,xianyu:this.runXianyu}

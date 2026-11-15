@@ -15,6 +15,22 @@ export function dateSegments(from:string,to:string,granularity:'day'|'month'):Da
   }
   return result
 }
+/** Previous calendar month in the same date format the rest of the plan uses. */
+export function previousMonthSegment(now:string=new Date().toISOString()):DateSegment{
+  const match=/^(\d{4})-(\d{2})-\d{2}/.exec(now);if(!match)throw new Error('读取当前日期失败')
+  const first=new Date(Date.UTC(Number(match[1]),Number(match[2])-1,1))
+  first.setUTCMonth(first.getUTCMonth()-1)
+  const end=new Date(Date.UTC(first.getUTCFullYear(),first.getUTCMonth()+1,1)-86400000)
+  return {from:first.toISOString().slice(0,10),to:end.toISOString().slice(0,10)}
+}
+/** Whole-month candidates across any number of years, ascending. Never spans a partial year. */
+export function monthCandidates(fromYear:number,toYear:number):DateSegment[]{
+  if(!Number.isInteger(fromYear)||!Number.isInteger(toYear)||fromYear<1970||toYear>2999||fromYear>toYear)throw new Error('请选择有效的年份范围')
+  if(toYear-fromYear>99)throw new Error('年份范围最多 100 年，请缩小范围')
+  const result:DateSegment[]=[]
+  for(let year=fromYear;year<=toYear;year++)result.push(...dateSegments(`${year}-01-01`,`${year}-12-31`,'month'))
+  return result
+}
 export function createPlan(platform:PlatformId,from:string,to:string,input:PlanInput):ExtractionPlan{
   if(!planPlatforms.includes(platform))throw new Error('此平台暂不支持提取计划')
   checkRange(from,to)

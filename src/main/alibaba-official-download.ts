@@ -5,7 +5,7 @@ import {createHash} from 'node:crypto'
 import type {OfficialRecord} from './alibaba-official-export'
 const active=new WeakSet<WebContents>(),maxBytes=32*1024*1024
 /** Reuses JD session-download structure, but only an exact task-owned HTTPS record is eligible. */
-export async function downloadAlibabaOfficialReport(contents:WebContents,record:OfficialRecord,trigger:()=>Promise<void>,options:{directory:string;assertAccount():Promise<void>;signal?:AbortSignal;timeoutMs?:number}):Promise<{bytes:Buffer;path:string;sha256:string}>{
+export async function downloadAlibabaOfficialReport(contents:WebContents,record:OfficialRecord,trigger:()=>Promise<unknown>,options:{directory:string;assertAccount():Promise<void>;signal?:AbortSignal;timeoutMs?:number}):Promise<{bytes:Buffer;path:string;sha256:string}>{
  const url=new URL(record.url)
  if(url.protocol!=='https:'||url.username||url.password||url.port||!/(^|\.)1688\.com$/.test(url.hostname)||!record.token||!record.filename.endsWith('.xlsx'))throw Error('官方报表下载来源尚未验证')
  if(active.has(contents))throw Error('当前官方报表正在下载')

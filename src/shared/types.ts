@@ -1,6 +1,6 @@
 export type CollectionMode = 'ordinary' | 'official-export'
-export interface AlibabaOfficialAudit { rows:number; uniqueOrders:number; importedOrders:number; outOfRange:number; accountMismatch:number; duplicates:number; missing:number; conflicts:{orderId:string;field:string;values:string[]}[]; warnings:string[]; scopeVerified:boolean }
-export interface AlibabaOfficialCheckpoint { phase:'search'|'submit'|'waiting'|'download'|'import'|'complete'; segmentIndex:number; rangeSignature?:string; expectedTotal?:number; submission?:'prepared'|'unknown'|'accepted'; token?:string; filePath?:string; fileSha256?:string; accountKey?:string; audit?:AlibabaOfficialAudit }
+export interface AlibabaOfficialAudit { rows:number; uniqueOrders:number; importedOrders:number; outOfRange:number; accountMismatch:number; duplicates:number; missing:number; conflicts:{orderId:string;field:string;values:string[]}[]; warnings:string[]; scopeVerified:boolean; paidFenTotal?:number; accountNameCount?:number }
+export interface AlibabaOfficialCheckpoint { phase:'search'|'submit'|'waiting'|'download'|'import'|'complete'; segmentIndex:number; rangeSignature?:string; expectedTotal?:number; submission?:'prepared'|'unknown'|'accepted'; token?:string; baseline?:string[]; filePath?:string; fileSha256?:string; accountKey?:string; audit?:AlibabaOfficialAudit }
 export type PlatformId = 'taobao' | 'alibaba' | 'pdd' | 'jd' | 'xianyu' | 'dewu' | 'kuaishou' | 'eleme' | 'meituan'
 export type TaskStatus = 'running' | 'paused' | 'needs_login' | 'partial' | 'completed' | 'failed'
 export interface Platform {

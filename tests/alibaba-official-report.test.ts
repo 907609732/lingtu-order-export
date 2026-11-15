@@ -1,6 +1,6 @@
 import {describe,it,expect} from 'vitest'
 import ExcelJS from 'exceljs'
-import {readAlibabaOfficialReport} from '../src/main/alibaba-official-report'
+import {completeOfficialImportPlan,readAlibabaOfficialReport} from '../src/main/alibaba-official-report'
 import {Store} from '../src/core/store'
 import {sameCollectionTime} from '../src/core/primary-collection-action'
 const headers=['订单编号','下单时间','订单实付款(元)','商品名称','数量','单价(元)','买家会员名','自定义列']
@@ -14,3 +14,33 @@ describe('synthetic official report (real template unverified)',()=>{
 })
 it('aborts the whole report before Store import when one order has conflicting creation dates',async()=>{const s=new Store(':memory:');try{const task=s.create({platform:'alibaba',mode:'official-export',from:options.from,to:options.to});const importReport=async()=>{const result=await readAlibabaOfficialReport(await file([['9','2026-01-03','5','正常订单',1,'5','buyer'],['1','2026-01-02','1','甲',1,'1','buyer'],['1','2026-03-02','1','乙',1,'1','buyer']]),options);s.add(task.id,result.orders);return result.audit.importedOrders};await expect(importReport()).rejects.toThrow(/订单1.*下单时间冲突/);expect(s.orders(task.id)).toEqual([]);expect(s.get(task.id).count).toBe(0)}finally{s.close()}})
 it('keeps successful parser audit count equal to actual stored unique orders',async()=>{const s=new Store(':memory:');try{const task=s.create({platform:'alibaba',mode:'official-export',from:options.from,to:options.to});const result=await readAlibabaOfficialReport(await file([['1','2026-01-02','2','甲',1,'1','buyer'],['1','2026-01-02','2','乙',1,'1','buyer'],['2','2026-03-02','1','丙',1,'1','buyer']]),options);s.add(task.id,result.orders);expect(result.audit.importedOrders).toBe(2);expect(s.get(task.id).count).toBe(2);expect(s.orders(task.id).map(o=>o.items.length)).toEqual([2,1])}finally{s.close()}})
+it('reports the report own paid total and stays idempotent when the same range is imported twice',async()=>{const s=new Store(':memory:');try{const task=s.create({platform:'alibaba',mode:'official-export',from:options.from,to:options.to});const bytes=await file([['1','2026-01-02','30.20','甲',1,'30.2','buyer'],['2','2026-01-03','9.80','乙',1,'9.8','buyer']]);const first=await readAlibabaOfficialReport(bytes,options);expect(first.audit.paidFenTotal).toBe(4000);expect(first.audit.importedOrders).toBe(2);s.add(task.id,first.orders);expect(s.get(task.id).count).toBe(2);const again=await readAlibabaOfficialReport(bytes,options);s.add(task.id,again.orders);expect(s.get(task.id).count).toBe(2);expect(s.orders(task.id).map(o=>o.items.length)).toEqual([1,1])}finally{s.close()}})
+it('warns when the official total and the parsed unique orders disagree',async()=>{const r=await readAlibabaOfficialReport(await file([['1','2026-01-02','1','甲',1,'1','buyer']]),{...options,expectedTotal:5});expect(r.audit.warnings.join()).toMatch(/官方数量5/)})
+const liveHeaders=['订单编号','买家公司名','买家会员名','卖家公司名','卖家会员名','货品总价(元)','运费(元)','涨价或折扣(元)','实付款(元)','订单状态','订单创建时间','订单付款时间','发货方','收货人姓名','收货地址','邮编','联系电话','联系手机','货品标题','单价(元)','数量','单位','货号','型号','Offer ID','SKU ID','物料编号','单品货号','货品种类','买家留言','物流公司','运单号','发票：购货单位名称','发票：纳税人识别号','发票：地址、电话','发票：开户行及账号','发票收取地址','关联编号','代理商姓名','代理商联系方式','是否代发订单','代发服务商id','微商订单号','下单批次号','下游渠道','下游订单号','下单公司主体','发起人登录名','是否发起免密支付(1:淘货源诚e赊免密支付2:批量下单免密支付)','订单备注']
+function liveRow(overrides:Record<number,unknown>={}){const row:unknown[]=new Array(liveHeaders.length).fill('');for(const [index,value] of Object.entries(overrides))row[Number(index)]=value;return row}
+describe('live 1688 export template (synthetic rows, real column order)',()=>{
+ it('maps every required field from the real template without alias conflicts',async()=>{
+  const row=liveRow({0:'1234567890123456789',2:'synthetic-buyer',3:'合成卖家',4:'synthetic-seller',5:'30.20',8:'30.20',9:'交易成功',10:new Date(Date.UTC(2026,9,2,10,0,0)),11:new Date(Date.UTC(2026,9,2,10,5,0)),13:'合成收货人',14:'合成地址',15:'100000',16:'01000000000',17:'13800000000',18:'合成商品',19:'10.10',20:2,21:'件',23:'型号A',29:'合成留言',30:'合成物流',31:'SF0000000000'})
+  const result=await readAlibabaOfficialReport(await file([row],liveHeaders),{account:'当前账号',from:'2026-10-01',to:'2026-10-31',expectedTotal:1})
+  expect(result.audit.conflicts).toEqual([]);expect(result.audit.accountMismatch).toBe(0);expect(result.audit.accountNameCount).toBe(1)
+  const order=result.orders[0]
+  expect(order.id).toBe('1234567890123456789');expect(order.createdAt).toBe('2026-10-02 10:00:00');expect(order.paidAt).toBe('2026-10-02 10:05:00')
+  expect(order.items[0].title).toBe('合成商品');expect(order.items[0].spec).toBe('型号A');expect(order.items[0].quantity).toBe(2)
+  expect(order.paidFen).toBe(3020);expect(order.phone).toBe('13800000000');expect(order.remark).toBe('合成留言');expect(order.shop).toBe('合成卖家')
+  expect(result.audit.paidFenTotal).toBe(3020)
+ })
+ it('keeps a placeholder task account from filtering out the live buyer member name',async()=>{
+  const row=liveRow({0:'2234567890123456789',2:'synthetic-buyer',8:'1.00',9:'交易成功',10:new Date(Date.UTC(2026,10,2,9,0,0)),18:'合成商品',19:'1.00',20:1})
+  const result=await readAlibabaOfficialReport(await file([row],liveHeaders),{account:'当前账号',from:'2026-10-01',to:'2026-12-31'})
+  expect(result.orders).toHaveLength(1);expect(result.audit.accountMismatch).toBe(0);expect(result.audit.warnings.join()).toContain('账号归属由下载流程核验')
+ })
+ it('refuses a report mixing several buyer member names when the task has no real account',async()=>{
+  const first=liveRow({0:'3234567890123456789',2:'synthetic-buyer',8:'1.00',9:'交易成功',10:new Date(Date.UTC(2026,10,2,9,0,0)),18:'合成商品',19:'1.00',20:1})
+  const second=liveRow({0:'4234567890123456789',2:'other-buyer',8:'1.00',9:'交易成功',10:new Date(Date.UTC(2026,10,3,9,0,0)),18:'合成商品',19:'1.00',20:1})
+  await expect(readAlibabaOfficialReport(await file([first,second],liveHeaders),{account:'当前账号',from:'2026-10-01',to:'2026-12-31'})).rejects.toThrow(/多个买家会员名/)
+ })
+})
+it('counts selected months independently from gap and outside months without claiming platform completeness',async()=>{const result=await readAlibabaOfficialReport(await file([['1','2026-01-02','2','甲',1,'2','buyer'],['2','2026-02-02','7','间隔月',1,'7','buyer'],['3','2026-03-02','3','乙',1,'3','buyer'],['4','2025-12-31','9','范围外',1,'9','buyer']]),{...options,expectedTotal:4});expect(result.orders.map(o=>o.id)).toEqual(['1','3']);expect(result.audit).toMatchObject({rows:4,uniqueOrders:4,importedOrders:2,outOfRange:2,paidFenTotal:500,scopeVerified:false});expect(result.audit.warnings.join()).toContain('尚未独立核验')})
+it('accepts a valid report with zero orders in the selected months',async()=>{const result=await readAlibabaOfficialReport(await file([['2','2026-02-02','7','间隔月',1,'7','buyer']]),options);expect(result.orders).toEqual([]);expect(result.audit).toMatchObject({rows:1,uniqueOrders:1,importedOrders:0,outOfRange:1,paidFenTotal:0,scopeVerified:false})})
+
+it('completes each selected plan segment including empty months with independent local counts',()=>{const plan:any={granularity:'month',currentBucket:'january',segments:[{id:'jan',from:'2026-01-01',to:'2026-01-31',status:'running',count:99},{id:'mar',from:'2026-03-01',to:'2026-03-31',status:'pending',count:0}],buckets:[{id:'january',from:'2026-01-01',to:'2026-01-31',segmentIds:['jan'],status:'running',cursor:'old'},{id:'march',from:'2026-03-01',to:'2026-03-31',segmentIds:['mar'],status:'pending',cursor:''}]};const result=completeOfficialImportPlan(plan,[{id:'1',createdAt:'2026-01-02'},{id:'2',createdAt:'2026-01-03'},{id:'3',createdAt:'2026-02-02'}] as any);expect(result?.segments.map(s=>[s.status,s.count])).toEqual([['completed',2],['completed',0]]);expect(result?.buckets.every(b=>b.status==='completed'&&b.cursor==='')).toBe(true);expect(result?.currentBucket).toBeUndefined();expect(plan.segments[0].status).toBe('running')})

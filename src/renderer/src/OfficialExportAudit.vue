@@ -6,7 +6,8 @@ defineEmits<{toggle:[]}>()
 <template>
  <section class="official-audit" aria-label="官方报表核对结果">
   <div class="audit-heading"><strong>官方报表核对</strong><span :class="['audit-scope',{verified:audit.scopeVerified}]">{{audit.scopeVerified?'范围已核实':'范围完整性未核实'}}</span><button class="text-button" :aria-expanded="expanded" @click="$emit('toggle')">{{expanded?'收起明细':'查看核对明细'}}</button></div>
-  <p class="audit-summary">报表 {{audit.rows}} 行 · 唯一订单 {{audit.uniqueOrders}} 笔 · 已导入 {{audit.importedOrders}} 笔</p>
+  <p class="audit-summary">报表 {{audit.rows}} 行 · 唯一订单 {{audit.uniqueOrders}} 笔 · 已导入 {{audit.importedOrders}} 笔 · 订单金额合计 ¥{{((audit.paidFenTotal||0)/100).toFixed(2)}}</p>
+  <p class="audit-note">金额合计取自报表内部，尚未与页面显示金额自动比对，请按核对明细人工确认。</p>
   <p v-if="!audit.scopeVerified" class="audit-note">未取得可核实的官网总数，不能确认所选月份的订单已全部导出。</p>
   <div v-if="expanded" class="audit-details">
    <dl><div><dt>范围外记录</dt><dd>{{audit.outOfRange}}</dd></div><div><dt>账号不符</dt><dd>{{audit.accountMismatch}}</dd></div><div><dt>重复记录</dt><dd>{{audit.duplicates}}</dd></div><div><dt>字段冲突</dt><dd>{{audit.conflicts.length}}</dd></div><div><dt>缺项</dt><dd>{{audit.missing}}</dd></div></dl>

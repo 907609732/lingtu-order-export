@@ -5,7 +5,7 @@ import {resolve} from 'node:path'
 import {DatabaseSync} from 'node:sqlite'
 import assert from 'node:assert/strict'
 const root=await mkdtemp(resolve('.test-output/official-ui-'))
-const env={...process.env,ORDERDESK_TEST_DATA:root};delete env.ELECTRON_RUN_AS_NODE
+const env={...process.env,ORDERDESK_TEST_DATA:root,ORDERDESK_ALIBABA_OFFICIAL:'0'};delete env.ELECTRON_RUN_AS_NODE
 let app
 try{
  app=await electron.launch({executablePath:resolve('node_modules/electron/dist/electron.exe'),args:['.'],env,timeout:45000})
@@ -17,7 +17,7 @@ try{
   gateDb.prepare('INSERT INTO tasks VALUES(?,?,?)').run(task.id,task.platform,JSON.stringify(task))
   for(const action of ['start','resume','retry']){
    const result=await p.evaluate(async action=>{try{await window.desk[action](action==='start'?{platform:'alibaba',mode:'official-export',from:'2026-01-01',to:'2026-01-31'}:'gate-official');return ''}catch(error){return String(error)}},action)
-   assert.match(result,/暂未开放自动导出/)
+   assert.match(result,/官方导出.*停用/)
   }
   assert.equal(gateDb.prepare('SELECT count(*) n FROM tasks').get().n,1)
   assert.equal(JSON.parse(gateDb.prepare('SELECT payload FROM tasks').get().payload).status,'paused')
@@ -41,7 +41,7 @@ try{
  await expect(p.getByLabel('查看历史采集任务').locator('option')).toHaveCount(1)
  await p.getByRole('button',{name:'模式二 · 官方导出',exact:true}).click()
  await expect(p.getByRole('button',{name:'② 继续官方导出',exact:true})).toBeDisabled()
- await expect(p.locator('.official-mode-note')).toContainText('官方页面导出流程尚待验证，暂未开放自动导出')
+ await expect(p.locator('.official-mode-note')).toContainText('官方导出已在当前运行环境中停用')
  await app.evaluate(({BrowserWindow})=>{globalThis.uiAvailable=true;BrowserWindow.getAllWindows()[0].webContents.send('desk:changed')})
  await expect(p.getByRole('button',{name:'② 继续官方导出',exact:true})).toBeEnabled()
  await expect(p.getByLabel('查看历史采集任务').locator('option')).toHaveCount(1)

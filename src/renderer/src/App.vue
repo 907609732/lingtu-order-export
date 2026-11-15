@@ -118,7 +118,7 @@ onUnmounted(()=>{off?.();offUpdate?.()})
                 <button class="text-button"  :disabled="busy||stopping" @click="action(()=>desk.finish(taskId))">结束读取</button>
               </div>
             </section><div class="button-row platform-actions"><button v-if="!pageOpen" class="secondary danger" :disabled="busy||!state||collectionRunning" :title="`清理 ${platform?.name} 的本机任务和订单记录，不删除已导出文件`" @click="clearPlatform">清理当前平台缓存</button><button class="secondary" @click="pageOpen?hidePage():openPage()" :disabled="busy||stopping">{{pageOpen?'返回导出台':platform?.mode==='proxy'?'打开平台页面':'登录 / 查看平台页'}}</button></div></div>
-            <p v-if="officialMode" class="official-mode-note" role="note">{{officialUnavailable?'官方页面导出流程尚待验证，暂未开放自动导出。所选月份与历史任务会保留。':'按所选月份自动查询、下载并核对；登录或验证时请在平台页完成后继续。范围完整性以核对结果为准。'}}</p>
+            <p v-if="officialMode" class="official-mode-note" role="note">{{officialUnavailable?'官方导出已在当前运行环境中停用。所选月份与历史任务会保留。':'官方报表下载后按所选月份筛选并导入；登录或验证时会暂停提示。申请期间请保持平台页显示，勿在其他窗口同时申请报表。范围与金额请查看核对结果。'}}</p>
           <div v-if="pageOpen" class="browser-placeholder"><p v-if="selected==='alibaba'">1688 使用淘宝／阿里账号登录，出现淘宝登录页属于官方跳转。登录后会返回 1688，再点击右上角“返回导出台”。</p><p v-else>请在下方的官方平台页面完成登录。完成后点击右上角“返回导出台”。</p></div>
           <template v-else>
             <section v-if="platform?.mode==='proxy'" class="proxy-guide">
