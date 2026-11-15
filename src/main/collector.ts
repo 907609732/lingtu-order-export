@@ -351,7 +351,7 @@ export class Collector {
       const current=this.store.get(task.id)
       if(this.stopped.has(task.id)||current.listOutcome!=='complete')return
       this.store.update(task.id,{status:'running',listOutcome:'pending'});this.changed()
-      if(current.plan!.buckets.some(b=>b.status!=='completed'))await delay(task.platform==='alibaba'?8000:1600)
+      if(current.plan!.buckets.some(b=>b.status!=='completed'))await delay(1600)
     }
     if(!this.stopped.has(task.id)){const count=this.store.get(task.id).count;this.finishCollection(task.id,{listOutcome:'complete',cursor:'',status:count?'partial':'completed',message:count?'提取计划的列表已全部读取，已有订单可导出；详情缺项仍待核对':'提取计划已全部查完，所选日期没有订单'});this.changed()}
   }
@@ -387,7 +387,7 @@ export class Collector {
       if(parsed.data.data.length===0||page>=Number(parsed.data.pages)){
         this.store.update(task.id,{listOutcome:'complete',status:'partial',message:'1688 列表读取结束；收货、物流、发票等详情仍需核对，已有结果可以导出'});this.changed();return
       }
-      await delay(5000)
+      await delay(1500)
     }
     if(!this.stopped.has(task.id)){this.store.update(task.id,{listOutcome:'limit',status:'partial',message:'本次达到分页上限，已有结果可导出'});this.changed()}
   }
@@ -606,7 +606,7 @@ export class Collector {
         this.diagnostics.event('collector.detail',{platform:'alibaba',taskId:task.id,current:rows.length,total:task.count})
         return
       }
-      if(attempt<11)await delay(15000)
+      if(attempt<11)await delay(10000)
     }
     if(!this.stopped.has(task.id))throw new CollectionError('detail_report_pending')
   }
