@@ -4,7 +4,12 @@ import {join} from 'node:path'
 import {createHash} from 'node:crypto'
 import type {OfficialRecord} from './alibaba-official-export'
 const active=new WeakSet<WebContents>(),maxBytes=32*1024*1024
-/** Reuses JD session-download structure, but only an exact task-owned HTTPS record is eligible. */
+function downloadURL(raw:string):string{
+ const url=new URL(raw)
+ if(url.protocol!=='https:'||url.username||url.password||url.port||!['1688.com','alicdn.com','aliyuncs.com'].some(host=>url.hostname===host||url.hostname.endsWith('.'+host)))throw Error('untrusted download URL')
+ url.hash='';return url.href
+}
+/** Bind to the exact original task URL; response filenames are not resource identity. */
 export async function downloadAlibabaOfficialReport(contents:WebContents,record:OfficialRecord,trigger:()=>Promise<unknown>,options:{directory:string;assertAccount():Promise<void>;signal?:AbortSignal;timeoutMs?:number}):Promise<{bytes:Buffer;path:string;sha256:string}>{
  const url=new URL(record.url)
  if(url.protocol!=='https:'||url.username||url.password||url.port||!/(^|\.)1688\.com$/.test(url.hostname)||!record.token||!record.filename.endsWith('.xlsx'))throw Error('官方报表下载来源尚未验证')
@@ -22,8 +27,14 @@ export async function downloadAlibabaOfficialReport(contents:WebContents,record:
    const done=(_event:Event,state:string)=>{if(state!=='completed'){finish(Error('官方报表下载中断，未入库'));return}void(async()=>{try{await options.assertAccount();const size=(await stat(path)).size;if(!size||size>maxBytes)throw Error('官方报表文件体积无效');finish(undefined,await readFile(path))}catch(error){finish(error instanceof Error?error:Error('官方报表读取失败'))}})()}
    const willDownload=(_event:Event,candidate:DownloadItem,source:WebContents)=>{
     if(source!==contents)return
-    if(settled||item||candidate.getURL()!==record.url||candidate.getFilename()!==record.filename||candidate.getURLChain().some(value=>value!==record.url)){
-     _event.preventDefault();candidate.cancel();finish(Error('官方报表下载与当前记录不匹配，已取消'));return
+    let mismatch=''
+    try{
+     const chain=candidate.getURLChain(),urls=(chain.length?chain:[candidate.getURL()]).map(downloadURL)
+     if(urls[0]!==downloadURL(record.url))mismatch='起始地址与任务记录不同'
+     else if(!urls.includes(downloadURL(candidate.getURL())))mismatch='下载地址不属于当前跳转链'
+    }catch{mismatch='下载跳转来源不可信'}
+    if(settled||item||mismatch){
+     _event.preventDefault();candidate.cancel();finish(Error(`官方报表下载与当前记录不匹配（${mismatch||'重复下载'}），已取消`));return
     }
     item=candidate
     try{candidate.setSavePath(path);candidate.on('updated',updated);candidate.once('done',done);updated();void options.assertAccount().catch(error=>finish(error))}catch{finish(Error('官方报表保存失败'))}

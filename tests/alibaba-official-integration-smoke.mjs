@@ -50,7 +50,21 @@ try{
    await page.evaluate(id=>window.desk.resume(id),id)
   }
  }
- await app.evaluate(async({session},{html,xlsx})=>{const s=session.fromPartition('persist:orderdesk-alibaba');await s.cookies.set({url:'https://air.1688.com',name:'unb',value:'synthetic-official'});globalThis.fixtureRequests=[];s.protocol.handle('https',req=>{globalThis.fixtureRequests.push(req.url);if(new URL(req.url).pathname==='/fixture/current.xlsx')return new Response(Buffer.from(xlsx,'base64'),{headers:{'content-type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','content-disposition':'attachment; filename="current.xlsx"'}});return new Response(html,{headers:{'content-type':'text/html;charset=utf-8'}})})},{html,xlsx})
+ await app.evaluate(async({session},{html,xlsx})=>{
+  const s=session.fromPartition('persist:orderdesk-alibaba');await s.cookies.set({url:'https://air.1688.com',name:'unb',value:'synthetic-official'})
+  globalThis.fixtureRequests=[];globalThis.fixtureDownloadAttempts=0;globalThis.fixtureReportResponses=0
+  s.on('will-download',(_event,item)=>{if(++globalThis.fixtureDownloadAttempts===1)setTimeout(()=>item.cancel(),20)})
+  s.protocol.handle('https',req=>{
+   globalThis.fixtureRequests.push(req.url)
+   if(new URL(req.url).pathname==='/fixture/current.xlsx')return new Response(null,{status:302,headers:{location:'https://trade.1688.com/fixture/report-content.xlsx'}})
+   if(new URL(req.url).pathname==='/fixture/report-content.xlsx'){
+    const bytes=Buffer.from(xlsx,'base64'),headers={'content-type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','content-disposition':'attachment; filename="server-orders.xlsx"'}
+    if(++globalThis.fixtureReportResponses===1){let timer;const body=new ReadableStream({start(c){c.enqueue(bytes.subarray(0,128));timer=setTimeout(()=>{try{c.enqueue(bytes.subarray(128));c.close()}catch{}},500)},cancel(){clearTimeout(timer)}});return new Response(body,{headers})}
+    return new Response(bytes,{headers})
+   }
+   return new Response(html,{headers:{'content-type':'text/html;charset=utf-8'}})
+  })
+ },{html,xlsx})
  const input={platform:'alibaba',mode:'official-export',from:'2026-08-01',to:'2026-10-31',plan:{granularity:'month',segments:[{from:'2026-08-01',to:'2026-08-31'},{from:'2026-10-01',to:'2026-10-31'}]}}
  await page.evaluate(async()=>{await window.desk.login('alibaba','ordinary');await window.desk.hidePage()})
  const paused=await page.evaluate(input=>window.desk.start(input),input)
@@ -61,13 +75,17 @@ try{
  assert.equal((await page.evaluate(()=>window.desk.state())).tasks.find(t=>t.id===paused.id).officialExport.submission,'prepared')
  await page.evaluate(id=>window.desk.resume(id),paused.id)
  const task=paused
+ const interrupted=await finish(task.id)
+ assert.equal(interrupted.status,'paused',JSON.stringify(interrupted));assert.match(interrupted.message,/下载中断/)
+ assert.equal(interrupted.officialExport.submission,'accepted');assert.ok(interrupted.officialExport.token);assert.equal(interrupted.count,0)
+ await page.evaluate(id=>window.desk.resume(id),task.id)
  const done=await finish(task.id)
  assert.equal(done.listOutcome,'complete',JSON.stringify(done))
  assert.equal(done.officialExport.phase,'complete');assert.equal(done.count,2)
  assert.deepEqual((await page.evaluate(id=>window.desk.orders(id),task.id)).map(o=>o.id).sort(),['900000000000001','900000000000003'])
  const evidence=await app.evaluate(async({webContents})=>{const w=webContents.getAllWebContents().find(w=>w.getURL().startsWith('https://air.1688.com'));return {dom:await w.executeJavaScript('({generated:window.generated,downloaded:window.downloaded,wrongExportClicks:window.wrongExportClicks})'),requests:globalThis.fixtureRequests}})
  assert.equal(evidence.dom.wrongExportClicks,0)
- assert.equal(evidence.dom.generated,1);assert.deepEqual(evidence.dom.downloaded,['https://trade.1688.com/fixture/current.xlsx']);assert.equal(evidence.requests.some(u=>u.endsWith('/stale.xlsx')),false)
+ assert.equal(evidence.dom.generated,1);assert.deepEqual(evidence.dom.downloaded,[]);assert.ok(evidence.requests.includes('https://trade.1688.com/fixture/current.xlsx'));assert.ok(evidence.requests.includes('https://trade.1688.com/fixture/report-content.xlsx'));assert.equal(evidence.requests.some(u=>u.endsWith('/stale.xlsx')),false)
  const db=new DatabaseSync(join(root,'orders.sqlite'));db.prepare('DELETE FROM settings WHERE key=?').run('officialSubmitAt');db.close()
  const zero=await page.evaluate(input=>window.desk.start(input),{platform:'alibaba',mode:'official-export',from:'2026-11-01',to:'2026-11-15',plan:{granularity:'month',segments:[{from:'2026-11-01',to:'2026-11-15'}]}})
  const zeroDone=await finish(zero.id)

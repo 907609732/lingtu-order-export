@@ -25,7 +25,7 @@ import {JdExportError,clickJdExportAction} from './jd-export'
 import {downloadJdExport} from './jd-export-download'
 import {collectJdExportPages,validateJdExportPage,type JdExportPage} from './jd-export-pages'
 import {runAlibabaOfficialExport} from './alibaba-official-export'
-import {createAlibabaOfficialDriver,triggerAlibabaOfficialDownload} from './alibaba-official-page'
+import {createAlibabaOfficialDriver} from './alibaba-official-page'
 import {downloadAlibabaOfficialReport} from './alibaba-official-download'
 import {completeOfficialImportPlan,readAlibabaOfficialReport} from './alibaba-official-report'
 import type {AlibabaOfficialCheckpoint} from '../shared/types'
@@ -308,9 +308,9 @@ export class Collector {
         checkpoint:()=>this.store.get(task.id).officialExport,
         save:value=>{const messages={search:'正在设置官方导出时间',submit:'正在申请官方报表',waiting:'正在等待官方报表生成',download:'正在下载官方报表',import:'正在核对并导入所选月份',complete:'所选月份已完成本地导入'};this.store.update(task.id,{officialExport:value as AlibabaOfficialCheckpoint,...(!this.stopped.has(task.id)?{message:messages[value.phase]}:{})});if(value.phase==='waiting'||value.phase==='submit'&&value.submission==='unknown')this.store.setting('officialSubmitAt',new Date().toISOString());this.changed()},
         stopped:()=>abort.signal.aborted||this.stopped.has(task.id)||!this.registry.valid(lease),
-        // Only the exact record link returned by the verified driver is clicked; the download itself is re-checked by URL, account and size.
+        // Download the verified record URL in its own session, without page click handlers rewriting it.
         download:async record=>{
-          const trigger=(async()=>{await guard();return triggerAlibabaOfficialDownload(officialPage,record.url,{guard,signal:abort.signal})}) as unknown as () => Promise<void>
+          const trigger=async()=>{await guard();view.webContents.downloadURL(record.url,{headers:{Referer:new URL(platformById('alibaba').url).origin+'/'}})}
           const result=await downloadAlibabaOfficialReport(view.webContents,record,trigger,{directory:join(app.getPath('userData'),'official-reports'),assertAccount:guard,signal:abort.signal})
           await guard();return result
         },
