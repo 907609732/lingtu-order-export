@@ -60,20 +60,15 @@ function coordsScript(target:OfficialTarget):string{return `(function(target){
  else if(target==='generate')el=od.byText('生成新报表');
  else if(target==='viewRecords')el=od.byText('查看过往导出报表');
  else if(target==='refresh')el=od.byText('刷新');
- if(!el||!od.vis(el))return null;
- try{el.scrollIntoView({block:'center'})}catch(e){}
- var box=el.getBoundingClientRect();
- var hit=document.elementFromPoint(box.x+box.width/2,box.y+box.height/2);
- if(!hit){
-  window.scrollBy(0,260);
-  try{el.scrollIntoView({block:'center'})}catch(e){}
-  box=el.getBoundingClientRect();
-  hit=document.elementFromPoint(box.x+box.width/2,box.y+box.height/2);
-  if(!hit)return null;
- }
- var related=hit===el||(el.contains&&el.contains(hit));var ancestor=el;while(ancestor&&!related){ancestor=ancestor.parentElement||(ancestor.getRootNode&&ancestor.getRootNode().host);if(ancestor===hit)related=true}if(!related)return null;
- if(box.width<=0||box.height<=0)return null;
- return {x:Math.round(box.x+box.width/2),y:Math.round(box.y+box.height/2)};
+ var labels={search:'搜索',export:'导出当前条件',generate:'生成新报表',viewRecords:'查看过往导出报表',refresh:'刷新'};
+ var candidates=labels[target]?od.all().filter(function(node){return node.tagName==='Q-BUTTON'&&od.text(node)===labels[target]}):(el?[el]:[]);
+ var issue={target:target,matched:candidates.length,visible:0,disabled:0,blocked:0};od.lastControlIssue=issue;
+ var disabled=function(node){return node.disabled===true||node.getAttribute('disabled')!==null||node.getAttribute('aria-disabled')==='true'};
+ var hitAt=function(x,y){var hit=document.elementFromPoint(x,y);for(var depth=0;hit&&hit.shadowRoot&&depth<20;depth++){var root=hit.shadowRoot;var deeper=root.elementFromPoint?root.elementFromPoint(x,y):null;if(!deeper||deeper===hit)break;hit=deeper}return hit};
+ var point=function(node){var box=node.getBoundingClientRect(),x=Math.round(box.x+box.width/2),y=Math.round(box.y+box.height/2);if(box.width<=0||box.height<=0||x<0||y<0||x>=(typeof innerWidth==='number'?innerWidth:1e9)||y>=(typeof innerHeight==='number'?innerHeight:1e9))return null;var hit=hitAt(x,y);while(hit){if(disabled(hit))return null;if(hit===node)return {x:x,y:y};hit=hit.parentElement||(hit.getRootNode&&hit.getRootNode().host)}return null};
+ var usable=[];for(var i=0;i<candidates.length;i++){var node=candidates[i];if(!od.vis(node))continue;issue.visible++;if(disabled(node)){issue.disabled++;continue}usable.push(node);var p=point(node);if(p)return p}
+ for(var i=0;i<usable.length;i++){var node=usable[i];try{node.scrollIntoView({block:'center',inline:'nearest',behavior:'instant'})}catch(e){}var p=point(node);if(p)return p;issue.blocked++}
+ return null;
 })(${JSON.stringify(target)})`}
 const RANGE_STATE=`(function(){
  var od=window.__od;
@@ -138,7 +133,7 @@ export function createAlibabaOfficialDriver(contents:OfficialPageAdapter,options
  const guard=async()=>{if(options.signal?.aborted)throw new Error('官方导出已暂停，断点已保留');await options.guard?.();if(options.signal?.aborted)throw new Error('官方导出已暂停，断点已保留')}
  const wait=async(ms:number)=>{await guard();await new Promise<void>((resolve,reject)=>{const signal=options.signal;const done=()=>{signal?.removeEventListener('abort',abort);resolve()};const timer=setTimeout(done,ms);const abort=()=>{clearTimeout(timer);signal?.removeEventListener('abort',abort);reject(new Error('官方导出已暂停，断点已保留'))};signal?.addEventListener('abort',abort,{once:true});if(signal?.aborted)abort()});await guard()}
  const run=async <T=unknown>(code:string):Promise<T>=>{await guard();await contents.executeJavaScript(INSTALL);await guard();const probe=await contents.executeJavaScript(PROBE) as OfficialProbe;if(probe?.verification)throw new CollectionError('login_or_verification');await guard();return await contents.executeJavaScript(code) as T}
- const tap=async(target:OfficialTarget,retryMs=0,beforeClick?:()=>void|Promise<void>)=>{
+ const tap=async(target:OfficialTarget,retryMs=target==='export'?6000:0,beforeClick?:()=>void|Promise<void>)=>{
   const deadline=Date.now()+retryMs
   for(;;){
    const point=await run<OfficialPoint|null>(coordsScript(target))
@@ -148,7 +143,10 @@ export function createAlibabaOfficialDriver(contents:OfficialPageAdapter,options
     await guard();await beforeClick?.();await guard();await contents.click(point.x,point.y)
     return true
    }
-   if(Date.now()>=deadline)return false
+   if(Date.now()>=deadline){
+    if(target==='export'){const issue=await run<{matched?:number;visible?:number;disabled?:number;blocked?:number}>('(function(){return window.__od.lastControlIssue||null})()');if(issue?.matched)throw new Error(`导出按钮暂不可点击（可见${issue.visible||0}，禁用${issue.disabled||0}，遮挡${issue.blocked||0}），未提交新报表`)}
+    return false
+   }
    await wait(300)
   }
  }
@@ -221,6 +219,8 @@ export function createAlibabaOfficialDriver(contents:OfficialPageAdapter,options
   async search(range){
    await ensure()
    if(options.fullAccountReport){
+    // Controls can render before their component event handlers are attached.
+    await wait(Math.max(1500,settleMs*2))
     // The account report is filtered locally, not by the website's date picker.
     // Zero is an unknown-count sentinel here, never evidence of an empty report.
     last={from:range.from,to:range.to,total:0}
@@ -330,4 +330,4 @@ export async function triggerAlibabaOfficialDownload(contents:OfficialPageAdapte
 }
 
 /** Self-contained injected diagnostics, also exercised against isolated DOM fixtures. */
-export const officialPageScripts={install:INSTALL,probe:PROBE,readRows:READ_ROWS}
+export const officialPageScripts={install:INSTALL,probe:PROBE,readRows:READ_ROWS,coords:coordsScript}

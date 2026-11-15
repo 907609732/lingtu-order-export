@@ -5,6 +5,25 @@ function element(tag:string,text='',attrs:Record<string,string>={},hidden=false)
  const el:any={tagName:tag,nodeType:1,textContent:text,children:[],className:'',id:'',parentElement:null,shadowRoot:null,hidden,getAttribute:(k:string)=>attrs[k]||null,getBoundingClientRect:()=>({x:0,y:0,width:100,height:20}),getRootNode:()=>({}),querySelector:()=>null}
  return el
 }
+function clickFixture(insideShadow:boolean){
+ const first=element('Q-BUTTON','导出当前条件'),second=element('Q-BUTTON','导出当前条件'),host=element('APP-HOST'),overlay=element('DIV')
+ first.getBoundingClientRect=()=>({x:0,y:0,width:80,height:20});second.getBoundingClientRect=()=>({x:100,y:0,width:80,height:20})
+ const root={host,querySelectorAll:()=>[first,second,overlay],elementFromPoint:(x:number)=>x<100?overlay:second}
+ host.shadowRoot=root
+ for(const el of [first,second,overlay]){el.getRootNode=()=>root;el.scrollIntoView=()=>{}}
+ const document={body:element('BODY'),querySelectorAll:()=>[host],elementFromPoint:(x:number)=>insideShadow||x>=100?host:overlay}
+ const context:any={window:{scrollBy(){}},document,location:{href:'https://fixture.invalid/'},getComputedStyle:()=>({display:'block',visibility:'visible',opacity:'1'}),setTimeout,innerWidth:800,innerHeight:600}
+ runInNewContext(officialPageScripts.install,context)
+ return {context,first,second,overlay,root}
+}
+it.each([false,true])('skips an obscured first duplicate export button (shadow overlay=%s)',insideShadow=>{
+ const {context}=clickFixture(insideShadow)
+ expect(runInNewContext(officialPageScripts.coords('export'),context)).toEqual({x:140,y:10})
+})
+it('rejects an overlay inside the same shadow root rather than treating the outer host as a hit',()=>{
+ const {context,root,overlay}=clickFixture(true);root.elementFromPoint=()=>overlay
+ expect(runInNewContext(officialPageScripts.coords('export'),context)).toBeNull()
+})
 async function probe(nodes:any[]){
  const document={body:element('BODY'),querySelectorAll:()=>nodes}
  const context:any={window:{},document,location:{href:'https://fixture.invalid/'},getComputedStyle:(el:any)=>({display:el.hidden?'none':'block',visibility:'visible',opacity:'1'}),setTimeout}

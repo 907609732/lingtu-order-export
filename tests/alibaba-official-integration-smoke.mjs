@@ -22,6 +22,10 @@ function fixture(){
  let panel,chosen
  for(const tracker of ['date-start','date-end']){const d=document.createElement('q-date');d.dataset.tracker=tracker;d.textContent=tracker;dates.append(d);d.onclick=()=>{chosen=d;panel?.remove();panel=document.createElement('div');panel.className='ui-date-container';shadow.append(panel);let month='2026-10';const render=()=>{panel.innerHTML='';const prev=document.createElement('a');prev.className='ui-date-prev';prev.textContent='<';const next=document.createElement('a');next.className='ui-date-next';next.textContent='>';const label=document.createElement('span');label.className='ui-date-switch';label.textContent=month;panel.append(prev,label,next);const shift=n=>{const dt=new Date(month+'-01T12:00:00Z');dt.setUTCMonth(dt.getUTCMonth()+n);month=dt.toISOString().slice(0,7);render()};prev.onclick=()=>shift(-1);next.onclick=()=>shift(1);for(let day=1;day<=31;day++){const value=month+'-'+String(day).padStart(2,'0');const a=document.createElement('a');a.dataset.date=value;a.textContent=String(day);a.onclick=()=>{chosen.setAttribute('value',value);time.setAttribute(chosen.dataset.tracker==='date-start'?'startdate':'enddate',value);select.firstElementChild.textContent=(time.getAttribute('startdate')||'')+' 至 '+(time.getAttribute('enddate')||'');panel.remove()};panel.append(a)}};render()}}
  button('搜索',dom,()=>{})
+ window.wrongExportClicks=0
+ const covered=button('导出当前条件',dom,()=>{window.wrongExportClicks++})
+ covered.style.cssText='position:fixed;left:20px;top:300px;width:180px;height:30px'
+ const blocker=document.createElement('div');blocker.style.cssText='position:fixed;left:10px;top:290px;width:240px;height:80px;z-index:9999;background:#eee';dom.append(blocker)
  const total=document.createElement('span');total.textContent='共3条';dom.append(total)
  const records=[{applied:'2026-01-01 00:00:00',href:'https://trade.1688.com/fixture/stale.xlsx'}]
  // No recognizable close button: production must return through its guarded navigation.
@@ -61,7 +65,8 @@ try{
  assert.equal(done.listOutcome,'complete',JSON.stringify(done))
  assert.equal(done.officialExport.phase,'complete');assert.equal(done.count,2)
  assert.deepEqual((await page.evaluate(id=>window.desk.orders(id),task.id)).map(o=>o.id).sort(),['900000000000001','900000000000003'])
- const evidence=await app.evaluate(async({webContents})=>{const w=webContents.getAllWebContents().find(w=>w.getURL().startsWith('https://air.1688.com'));return {dom:await w.executeJavaScript('({generated:window.generated,downloaded:window.downloaded})'),requests:globalThis.fixtureRequests}})
+ const evidence=await app.evaluate(async({webContents})=>{const w=webContents.getAllWebContents().find(w=>w.getURL().startsWith('https://air.1688.com'));return {dom:await w.executeJavaScript('({generated:window.generated,downloaded:window.downloaded,wrongExportClicks:window.wrongExportClicks})'),requests:globalThis.fixtureRequests}})
+ assert.equal(evidence.dom.wrongExportClicks,0)
  assert.equal(evidence.dom.generated,1);assert.deepEqual(evidence.dom.downloaded,['https://trade.1688.com/fixture/current.xlsx']);assert.equal(evidence.requests.some(u=>u.endsWith('/stale.xlsx')),false)
  const db=new DatabaseSync(join(root,'orders.sqlite'));db.prepare('DELETE FROM settings WHERE key=?').run('officialSubmitAt');db.close()
  const zero=await page.evaluate(input=>window.desk.start(input),{platform:'alibaba',mode:'official-export',from:'2026-11-01',to:'2026-11-15',plan:{granularity:'month',segments:[{from:'2026-11-01',to:'2026-11-15'}]}})
