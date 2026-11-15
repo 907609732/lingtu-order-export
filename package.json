@@ -9,7 +9,8 @@
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev --config build/config/electron.vite.config.ts",
-    "build": "vue-tsc --noEmit && electron-vite build --config build/config/electron.vite.config.ts",
+    "build": "vue-tsc --noEmit && electron-vite build --config build/config/electron.vite.config.ts && npm run build:mcp",
+    "build:mcp": "vite build --config build/config/mcp.vite.config.ts",
     "start": "electron-vite preview --config build/config/electron.vite.config.ts",
     "test": "vitest run --config build/config/vitest.config.ts && node --test tests/update-assets.test.mjs",
     "verify:update-assets": "node scripts/verify-update-assets.mjs release",
@@ -18,13 +19,15 @@
   },
   "dependencies": {
     "@element-plus/icons-vue": "2.3.2",
+    "@modelcontextprotocol/sdk": "1.32.2",
     "electron-log": "5.4.4",
     "electron-updater": "6.8.11",
     "element-plus": "2.14.7",
     "exceljs": "4.4.0",
     "http-mitm-proxy": "^1.1.0",
     "json-bigint": "^1.0.0",
-    "vue": "3.5.44"
+    "vue": "3.5.44",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.0",
@@ -54,6 +57,24 @@
       "LICENSE"
     ],
     "asar": true,
+    "extraResources": [
+      {
+        "from": "out/mcp",
+        "to": "mcp"
+      },
+      {
+        "from": "docs/LOCAL_AI.md",
+        "to": "mcp/LOCAL_AI.md"
+      },
+      {
+        "from": "node_modules/@modelcontextprotocol/sdk/LICENSE",
+        "to": "mcp/MCP-SDK-LICENSE"
+      },
+      {
+        "from": "node_modules/zod/LICENSE",
+        "to": "mcp/ZOD-LICENSE"
+      }
+    ],
     "publish": {
       "provider": "github",
       "owner": "907609732",

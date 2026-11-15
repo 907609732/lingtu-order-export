@@ -1,7 +1,7 @@
 name: Build Windows
 on:
   push:
-    branches: ['master', 'codex/rename-procurement-export', 'codex/in-app-updates-20261114']
+    branches: ['master', 'codex/rename-procurement-export', 'codex/in-app-updates-20261114', 'codex/local-ai-api-20261116']
   pull_request:
     branches: ['master']
   workflow_dispatch:
@@ -32,6 +32,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Update asset verification failed' }
       - name: Check real Electron update UI and IPC with isolated data
         run: node tests/update-ui-smoke.mjs
+      - name: Verify local API and Codex MCP with isolated orders
+        run: node tests/local-ai-smoke.mjs
       - name: Verify four-step collection with isolated data
         run: node tests/plan-ui-smoke.mjs
       - name: Verify independent platform collectors and export snapshots

@@ -21,6 +21,8 @@ import { UpdateController } from './updater'
 import electronUpdater from 'electron-updater'
 import { reportLaunch } from './analytics'
 import {chooseUserData} from './user-data'
+import {startLocalApi} from '../ai/local-api'
+import {defaultConnectionFile} from '../ai/discovery'
 const root=dirname(fileURLToPath(import.meta.url))
 app.setName('电商平台采购订单导出')
 if(process.env.ORDERDESK_TEST_DATA)app.setPath('userData',resolve(process.env.ORDERDESK_TEST_DATA))
@@ -30,11 +32,13 @@ if(!hasInstanceLock)app.quit()
 let store:Store,collector:Collector,proxy:OrderProxy,win:BrowserWindow,diagnostics:Diagnostics,journal:ExecutionLog;let exporting=false;let exportingPlatform:PlatformId|undefined;let proxyStarting=false
 app.on('second-instance',()=>{if(win&&!win.isDestroyed()){if(win.isMinimized())win.restore();win.show();win.focus()}})
 let updater:UpdateController
+let localApi:Awaited<ReturnType<typeof startLocalApi>>|undefined
+const actions=new Map<string,(...args:any[])=>any>()
 let logNotification:ReturnType<typeof setTimeout>|undefined
 const executionChanged=()=>{if(logNotification)return;logNotification=setTimeout(()=>{logNotification=undefined;if(win&&!win.isDestroyed())win.webContents.send('desk:executionChanged')},100);logNotification.unref()}
 const change=()=>{if(win&&!win.isDestroyed())win.webContents.send('desk:changed')}
 const run=(id:string)=>{void collector.run(store.get(id)).catch(e=>{diagnostics.event('collector.failed',{taskId:id},e);store.update(id,{status:'failed',message:e.message});change()})}
-function bind(name:string,fn:(...args:any[])=>any){ipcMain.handle('desk:'+name,async(event,...args)=>{
+function bind(name:string,fn:(...args:any[])=>any){actions.set(name,fn);ipcMain.handle('desk:'+name,async(event,...args)=>{
   if(event.sender!==win.webContents||event.senderFrame!==win.webContents.mainFrame)throw new Error('不允许此页面访问本机数据')
   const started=Date.now(),quiet=['state','orders','hidePage','setLogging','reportError','executionLogs','setExecutionLogVisible'].includes(name)
   if(!quiet)diagnostics.event('ipc.start',{operation:name})
@@ -115,6 +119,14 @@ app.whenReady().then(async()=>{
   bind('openWebsite',()=>{if(WEBSITE_URL)shell.openExternal(WEBSITE_URL)})
   bind('openContact',()=>shell.openExternal(CONTACT_URL))
   bind('openRepository',()=>shell.openExternal(REPOSITORY_URL))
+  actions.set('aiGetTask',(id:string)=>store.get(id))
+  actions.set('aiExport',async(input:ExportInput)=>{
+    if(!store.setting('outputDir')){
+      const directory=join(app.getPath('documents'),'电商订单导出')
+      await mkdir(directory,{recursive:true});store.setting('outputDir',directory);change()
+    }
+    return actions.get('export')!(input)
+  })
   // 启动检查和统计独立，任一网络请求失败均不阻塞另一项。
   if(!process.env.ORDERDESK_TEST_DATA){
     void updater.check()
@@ -123,9 +135,16 @@ app.whenReady().then(async()=>{
   win.once('ready-to-show',()=>win.show())
   if(process.env.ELECTRON_RENDERER_URL)await win.loadURL(process.env.ELECTRON_RENDERER_URL);else await win.loadFile(join(root,'../renderer/index.html'))
   win.show()
+  if(process.env.ORDERDESK_LOCAL_API!=='0'){
+    const connectionFile=process.env.ORDERDESK_TEST_DATA?join(app.getPath('userData'),'ai','connection.json'):defaultConnectionFile()
+    try{localApi=await startLocalApi({connectionFile,invoke:(operation,args)=>{
+      const action=actions.get(operation);if(!action)throw new Error('软件不支持此操作');return action(...args)
+    },onCall:(tool,success)=>diagnostics.event('ai.call',{operation:tool,success})})}
+    catch(error){diagnostics.event('ai.start_failed',{},error)}
+  }
   if(process.env.ORDERDESK_SCREENSHOT){setTimeout(async()=>{await writeFile(process.env.ORDERDESK_SCREENSHOT!,(await win.webContents.capturePage()).toPNG())},2000)}
 }).catch(error=>{diagnostics?.event('app.start_failed',{},error);dialog.showErrorBox('电商平台采购订单导出启动失败',error instanceof Error?error.message:'无法初始化本机数据');app.quit()})
 process.on('unhandledRejection',error=>diagnostics?.event('app.unhandled_rejection',{},error))
 process.on('uncaughtExceptionMonitor',error=>diagnostics?.event('app.uncaught_exception',{},error))
 app.on('window-all-closed',()=>app.quit())
-app.on('before-quit',()=>{proxy?.stop();collector?.dispose();diagnostics?.event('app.exit');store?.close()})
+app.on('before-quit',()=>{void localApi?.close();proxy?.stop();collector?.dispose();diagnostics?.event('app.exit');store?.close()})

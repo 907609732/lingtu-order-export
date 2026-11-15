@@ -117,3 +117,6 @@ GitHub 为主仓库，Gitee 为代码镜像。代码修改从 GitHub 同步到 G
 第三方依赖、平台名称与 Logo、引用素材遵循各自的许可证或权利声明；本项目的 MIT 协议不改变这些权利。
 
 BY 五成
+# 本机 AI 调用
+
+支持 Codex 通过本地 API + MCP 查询任务、开始/暂停/继续采集和导出 Excel/CSV。见 [接入说明](docs/LOCAL_AI.md)。

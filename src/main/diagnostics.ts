@@ -10,7 +10,7 @@ import { CollectionError, collectionFailureText, mtopFailure } from './collectio
 log.transports.console.writeFn=()=>{}
 
 const events = new Set([
-  'logging.enabled','logging.disabled','app.start','app.exit','app.start_failed',
+  'logging.enabled','logging.disabled','app.start','app.exit','app.start_failed','ai.call','ai.start_failed',
   'app.unhandled_rejection','app.uncaught_exception','ipc.start','ipc.done','ipc.failed',
   'renderer.error','renderer.gone','renderer.preload_failed','platform.load_failed',
   'platform.debugger_failed','platform.response_failed','platform.gone',
@@ -25,7 +25,7 @@ type Level = 'info' | 'warn' | 'error'
 export type DiagnosticListener = (event: string, context: Record<string,unknown>, error: Record<string,unknown>|undefined, level: Level) => void
 const enums:Record<string,readonly string[]> = {
   platform:['taobao','alibaba','pdd','jd','xianyu','dewu','kuaishou','eleme','meituan'],
-  operation:['state','orders','hidePage','setLogging','login','start','pause','resume','retry','finish','chooseDirectory','export','openOutput','openExport','clear','proxyStart','proxyStop','certificate','proxySettings','openLogs'],
+  operation:['get_state','list_tasks','get_task','list_orders','open_login','start_collection','pause_collection','resume_collection','retry_collection','enrich_details','export_orders','state','orders','hidePage','setLogging','login','start','pause','resume','retry','finish','chooseDirectory','export','openOutput','openExport','clear','proxyStart','proxyStop','certificate','proxySettings','openLogs'],
   status:['running','paused','needs_login','partial','completed','failed'],
   format:['xlsx','csv'],origin:['window','promise','vue'],
   phase:['official_export','platform','page','detail','rows','images','write','response'],action:['pause','resume','retry','finish'],
@@ -43,6 +43,7 @@ export function safeContext(context:Record<string,unknown>):Record<string,unknow
   for (const [key,values] of Object.entries(enums)) if (typeof context[key]==='string' && values.includes(context[key] as string)) safe[key]=context[key]
   for (const key of counters) if (typeof context[key]==='number' && Number.isFinite(context[key]) && Math.abs(context[key] as number)<=1e9) safe[key]=Math.round(context[key] as number)
   if (typeof context.images==='boolean') safe.images=context.images
+  if (typeof context.success==='boolean') safe.success=context.success
   if (typeof context.interrupted==='boolean') safe.interrupted=context.interrupted
   if (typeof context.taskId==='string' && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(context.taskId)) safe.taskId=context.taskId
   if (typeof context.version==='string' && /^\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(context.version)) safe.version=context.version
