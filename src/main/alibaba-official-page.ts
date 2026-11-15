@@ -14,7 +14,7 @@ export interface OfficialRecordRow {applied:string;finished:string;status:string
 export interface OfficialPoint {x:number;y:number}
 export type OfficialTarget='select'|'dateStart'|'dateEnd'|'search'|'export'|'generate'|'viewRecords'|'refresh'
 export interface OfficialPageAdapter {executeJavaScript(code:string):Promise<unknown>;click?(x:number,y:number):Promise<void>}
-export interface OfficialDriverOptions {submitPollMs?:number;recordPollMs?:number;submitAttempts?:number;recordAttempts?:number;settleMs?:number;guard?:()=>Promise<void>;signal?:AbortSignal;resetPage?:()=>Promise<void>;beforeSubmit?:(baseline:string[])=>void|Promise<void>;onSubmitted?:(result:OfficialTokenParts&{token:string})=>void|Promise<void>}
+export interface OfficialDriverOptions {submitPollMs?:number;recordPollMs?:number;submitAttempts?:number;recordAttempts?:number;settleMs?:number;guard?:()=>Promise<void>;signal?:AbortSignal;fullAccountReport?:boolean;resetPage?:()=>Promise<void>;beforeSubmit?:(baseline:string[])=>void|Promise<void>;onSubmitted?:(result:OfficialTokenParts&{token:string})=>void|Promise<void>}
 const tokenSeparator='~'
 /** The token carries its own range so a resumed task can still verify the record without driver memory. */
 export function encodeOfficialToken(parts:OfficialTokenParts):string{return [parts.from,parts.to,String(parts.total),parts.appliedAt,...(parts.href?[encodeURIComponent(parts.href)]:[])].join(tokenSeparator)}
@@ -158,7 +158,7 @@ export function createAlibabaOfficialDriver(contents:OfficialPageAdapter,options
   for(let attempt=0;attempt<20;attempt++){
    const probe=await run<OfficialProbe&{error?:string}>(PROBE)
    if(probe?.verification)throw new CollectionError('login_or_verification')
-   if(probe&&probe.hasDateSelect&&probe.hasSearch&&probe.hasExport){
+   if(probe&&probe.hasExport&&(options.fullAccountReport||probe.hasDateSelect&&probe.hasSearch)){
     if(probe.activeTab&&!/全部/.test(probe.activeTab))throw new Error('官方订单页当前不在「全部订单」标签，已停止且未提交导出')
     return probe
    }
@@ -220,6 +220,12 @@ export function createAlibabaOfficialDriver(contents:OfficialPageAdapter,options
  return {
   async search(range){
    await ensure()
+   if(options.fullAccountReport){
+    // The account report is filtered locally, not by the website's date picker.
+    // Zero is an unknown-count sentinel here, never evidence of an empty report.
+    last={from:range.from,to:range.to,total:0}
+    return {...last,scope:'account-report',total:0}
+   }
    await wait(Math.max(1500,settleMs*2))
    await ensureDropdown()
    if(!await tap('dateStart',6000))throw new Error('官方订单页未找到开始日期控件，已停止且未提交导出')

@@ -30,7 +30,7 @@ export async function runAlibabaOfficialExport(driver:OfficialDriver,options:Off
    save({phase:'search',segmentIndex:index})
    const search=await driver.search(range)
    await guard()
-   if(search.from!==range.from||search.to!==range.to||search.scope!=='all-results'||!Number.isSafeInteger(search.total)||search.total<0)throw Error('无法验证官方完整搜索范围、日期及总数，已停止且未提交导出')
+   if(search.from!==range.from||search.to!==range.to||!['all-results','account-report'].includes(search.scope)||!Number.isSafeInteger(search.total)||search.total<0)throw Error('无法验证官方完整搜索范围或账号报表模式，已停止且未提交导出')
    await guard();save({phase:'submit',submission:'prepared',expectedTotal:search.total})
    // Save before the click. A crash or rejected DOM promise is never permission to click again.
    const submitted=await driver.submit(async()=>{await guard();save({submission:'unknown'})})

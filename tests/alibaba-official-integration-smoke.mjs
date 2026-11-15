@@ -29,7 +29,7 @@ function fixture(){
  const showRecords=()=>{const d=makeDialog();const render=()=>{d.querySelectorAll('q-table-tr,q-table-th').forEach(e=>e.remove());const h=document.createElement('q-table-th');h.textContent='申请时间';d.append(h);for(const r of records){const row=document.createElement('q-table-tr');row.className='export-record-tr';for(const t of [r.applied,r.applied,'成功']){const c=document.createElement('q-table-td');c.textContent=t;row.append(c)}const a=document.createElement('a');a.href=r.href;a.target='_blank';a.textContent='下载';a.onclick=()=>window.downloaded.push(r.href);row.append(a);d.append(row)}};button('刷新',d,render);render()}
  button('导出当前条件',dom,()=>{const d=makeDialog();d.append(document.createTextNode('批量导出'));button('查看过往导出报表',d,showRecords);button('生成新报表',d,()=>{window.generated++;if(window.fixtureMode!=='stale')records.push({applied:'2026-11-15 12:00:'+String(window.generated).padStart(2,'0'),href:'https://trade.1688.com/fixture/current.xlsx'});d.remove();showRecords()})})
 }
-const html='<!doctype html><meta charset="utf-8"><body><script>('+fixture.toString()+')()</script>'
+ const html='<!doctype html><meta charset="utf-8"><body><script>('+fixture.toString()+')();document.querySelector("fixture-app").shadowRoot.querySelector("order-search-time").remove()</script>'
 const executable=process.argv[2]?resolve(process.argv[2]):resolve('node_modules/electron/dist/electron.exe')
 const app=await electron.launch({executablePath:executable,args:process.argv[2]?[]:['.'],env,timeout:45000})
 try{

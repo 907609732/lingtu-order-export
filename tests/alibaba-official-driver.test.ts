@@ -3,6 +3,13 @@ import {createAlibabaOfficialDriver,decodeOfficialToken,encodeOfficialToken,offi
 const range={from:'2026-10-01',to:'2026-10-31'}
 const fast={submitPollMs:1,recordPollMs:1,submitAttempts:3,recordAttempts:3,settleMs:1}
 
+it('prepares an account report without manipulating date controls or claiming a page total',async()=>{
+ const {contents,kinds,clicks}=makeDriver(kind=>kind==='probe'?{verification:false,hasDateSelect:false,hasSearch:false,hasExport:true,activeTab:'全部订单'}:healthy(kind))
+ const driver=createAlibabaOfficialDriver(contents,{...fast,fullAccountReport:true} as any)
+ await expect(driver.search(range)).resolves.toEqual({...range,scope:'account-report',total:0})
+ expect(clicks).toHaveLength(0);expect(kinds).not.toContain('pick');expect(kinds).not.toContain('total')
+})
+
 it('returns from records via guarded page reset when no recognizable modal close control exists',async()=>{
  let reads=0,resets=0,marked=false
  const old='2026-11-15 03:56:29',fresh='2026-11-15 16:02:11'

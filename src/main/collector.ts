@@ -299,7 +299,7 @@ export class Collector {
       const officialSegments=(task.plan?.segments?.map(({from,to})=>({from,to}))||[]).sort((a,b)=>a.from.localeCompare(b.from))
       const officialRange=officialSegments.length?{from:officialSegments[0].from,to:officialSegments[officialSegments.length-1].to}:{from:task.from,to:task.to}
       await runAlibabaOfficialExport(createAlibabaOfficialDriver(officialPage,{
-        guard,signal:abort.signal,resetPage,
+        guard,signal:abort.signal,resetPage,fullAccountReport:true,
         beforeSubmit:async baseline=>{assertActive();this.store.update(task.id,{officialExport:{...this.store.get(task.id).officialExport!,baseline}});this.changed()},
         // Preserve a confirmed token even if Stop won the race immediately after the real click.
         onSubmitted:async submitted=>{this.store.update(task.id,{officialExport:{...this.store.get(task.id).officialExport!,phase:'waiting',submission:'accepted',token:submitted.token},...(!this.stopped.has(task.id)?{message:'正在等待官方报表生成'}:{})});this.store.setting('officialSubmitAt',new Date().toISOString());this.changed()}
@@ -319,7 +319,7 @@ export class Collector {
           if(!bytes?.length)throw new Error('官方报表为空，未入库')
           const magic=bytes.subarray(0,2).toString('latin1')
           if(magic!=='PK')throw new Error(`官方报表不是 xlsx（前两字节 ${JSON.stringify(magic)}，${bytes.length} 字节），未入库`)
-          const result=await readAlibabaOfficialReport(bytes,{account:task.account,...range,segments:officialSegments.length?officialSegments:undefined,expectedTotal:officialSegments.length?undefined:total})
+          const result=await readAlibabaOfficialReport(bytes,{account:task.account,...range,segments:officialSegments.length?officialSegments:undefined})
           if(result.audit.accountMismatch||result.audit.conflicts.length)throw new Error(`官方报表核对未通过（字段冲突 ${result.audit.conflicts.length}，账号不符 ${result.audit.accountMismatch}），未入库`)
           result.audit.warnings.push('官方导出忽略日期筛选，报表为全量数据，已按所选月份在本地切分；范围完整性仍以核对结果为准')
           await guard()
