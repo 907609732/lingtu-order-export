@@ -22,6 +22,8 @@ try{
  const input=platform=>({platform,from:'2026-10-01',to:'2026-10-31',plan:{granularity:'month',segments:[{from:'2026-10-01',to:'2026-10-31'}]}})
  const state=()=>page.evaluate(()=>window.desk.state())
  const start=platform=>page.evaluate(input=>window.desk.start(input),input(platform))
+ // A completed official-mode view must be replaceable by the new ordinary run's own lease.
+ await page.evaluate(()=>window.desk.login('alibaba','official-export'))
  const a=await start('alibaba')
  await expect.poll(()=>app.evaluate(({webContents})=>{const w=webContents.getAllWebContents().find(w=>w.getURL().startsWith('https://air.1688.com'));return w?.executeJavaScript('window.started||0')})).toBe(1)
  await assert.rejects(start('alibaba'),/当前平台|正在|采集|等待/)
@@ -82,6 +84,6 @@ try{
  await expect.poll(async()=>(await state()).tasks.find(t=>t.id===duringProxyStartup.id).status).toBe('completed')
  await app.evaluate(()=>globalThis.proxyListenReply());assert.equal(await proxyStarting,'started')
  assert.equal((await state()).proxy.platform,'dewu');await page.evaluate(()=>window.desk.proxyStop())
- console.log(JSON.stringify({passed:true,root,overlap:true,samePlatformGuard:true,accountIsolation:true,clearRecheck:true,exportOverlap:true,proxyInitializingGuard:true}))
+ console.log(JSON.stringify({passed:true,root,overlap:true,officialToOrdinarySwitch:true,samePlatformGuard:true,accountIsolation:true,clearRecheck:true,exportOverlap:true,proxyInitializingGuard:true}))
 }finally{if(app)await app.close()}
 

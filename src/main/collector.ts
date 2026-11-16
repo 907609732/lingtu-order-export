@@ -78,7 +78,7 @@ export class Collector {
     let parsed:URL;try{parsed=new URL(url)}catch{throw new Error('此订单尚未取得平台详情链接')}
     if(parsed.protocol!=='https:'||parsed.username||parsed.password||parsed.port||!allowedHost(order.platform,parsed.hostname)||/create|submit|cancel|delete|confirm|payorder/i.test(parsed.pathname))throw new Error('此订单详情链接暂不支持打开')
     const lease=this.registry.acquire(order.platform,'navigation:'+order.id);this.changed()
-    try{const view=await this.ensure(order.platform);await this.navigateDetail(view,url);if(generation!==this.displayGeneration)return
+    try{const view=await this.ensure(order.platform,'ordinary',lease);await this.navigateDetail(view,url);if(generation!==this.displayGeneration)return
     this.hide();this.current=view;this.win.contentView.addChildView(view);this.layout()}finally{this.registry.release(lease);this.changed()}
   }
   private async navigateDetail(view:WebContentsView,url:string){
@@ -99,7 +99,7 @@ export class Collector {
     this.diagnostics.event('collector.start',{platform:task.platform,taskId:task.id,count:task.count})
     this.progress.set(task.id,new ExecutionProgress(this.diagnostics,'collector',{platform:task.platform,taskId:task.id}))
     try{
-      this.stage(task,{phase:'platform'});const view=await this.ensure(task.platform)
+      this.stage(task,{phase:'platform'});const view=await this.ensure(task.platform,'ordinary',lease)
       if(this.stopped.has(task.id))return
       if(task.platform==='pdd')await this.pddDetails(task,view)
       else if(task.platform==='xianyu')await this.xianyuDetails(task,view)
@@ -220,7 +220,7 @@ export class Collector {
     try{
       if(platformById(task.platform).mode==='proxy'){this.stage(task,{phase:'response'});this.diagnostics.event('collector.waiting',{platform:task.platform,taskId:task.id});this.store.update(task.id,{message:'正在等待订单页面数据；请在微信小程序打开买家订单列表'});this.changed();return}
       this.stage(task,{phase:'platform'})
-      const view=await this.ensure(task.platform);if(this.stopped.has(task.id))return
+      const view=await this.ensure(task.platform,'ordinary',lease);if(this.stopped.has(task.id))return
       if(task.plan)await this.runPlan(task,view)
       else if(task.platform==='xianyu')await this.runXianyu(task,view)
       else if(task.platform==='alibaba')await this.runAlibaba(task,view)

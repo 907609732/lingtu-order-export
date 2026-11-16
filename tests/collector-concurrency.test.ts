@@ -1,10 +1,35 @@
 import {it,expect,vi} from 'vitest'
 const views:any[]=[]
-vi.mock('electron',()=>({session:{fromPartition:()=>({setPermissionRequestHandler(){},cookies:{get:async()=>[]}})},WebContentsView:class{webContents:any;constructor(){const events:any={};this.webContents={events,getUserAgent:()=>'',setUserAgent(){},isDestroyed:()=>false,on:(name:string,fn:any)=>events[name]=fn,setWindowOpenHandler(){},loadURL:vi.fn(async()=>{}),debugger:{attach(){},isAttached:()=>false,sendCommand:vi.fn(async()=>({body:'{}'})),on:(name:string,fn:any)=>events[name]=fn},close(){}};views.push(this)}}}))
+vi.mock('electron',()=>({session:{fromPartition:()=>({setPermissionRequestHandler(){},cookies:{get:async()=>[]}})},WebContentsView:class{setBounds(){}webContents:any;constructor(){const events:any={};this.webContents={events,getUserAgent:()=>'',setUserAgent(){},isDestroyed:()=>false,on:(name:string,fn:any)=>events[name]=fn,setWindowOpenHandler(){},loadURL:vi.fn(async()=>{}),debugger:{attach(){},isAttached:()=>false,sendCommand:vi.fn(async()=>({body:'{}'})),on:(name:string,fn:any)=>events[name]=fn},close(){}};views.push(this)}}}))
 import {Collector} from '../src/main/collector'
 import {CollectionError} from '../src/main/collection-errors'
 function fixture(){const tasks:any={a:{id:'a',platform:'taobao',status:'running'},b:{id:'b',platform:'jd',status:'running'}};const store:any={get:(id:string)=>tasks[id],update:(id:string,patch:any)=>Object.assign(tasks[id],patch),orders:()=>[],add:vi.fn()};const c:any=new Collector({on(){},contentView:{addChildView(){},removeChildView(){}},getContentSize:()=>[1200,800]} as any,store,()=>{},{event(){}} as any);c.ensure=async()=>({});return{c,tasks,store}}
 function deferred(){let resolve!:()=>void;const promise=new Promise<void>(r=>resolve=r);return{promise,resolve}}
+function alibabaModeFixture(){
+ const {tasks,store}=fixture();Object.assign(tasks.a,{platform:'alibaba',mode:'ordinary',count:0,pages:0,listOutcome:'complete',message:''})
+ const c:any=new Collector({on(){},contentView:{addChildView(){},removeChildView(){}},getContentSize:()=>[1200,800]} as any,store,()=>{},{event(){}} as any)
+ return {c,tasks,store}
+}
+it('starts ordinary collection after an official-export view using its own platform lease',async()=>{
+ const {c,tasks,store}=alibabaModeFixture();const official=await c.ensure('alibaba','official-export')
+ const entered:any[]=[];c.runAlibaba=async(task:any,view:any)=>{entered.push(view);store.update(task.id,{status:'partial',message:'ordinary list read'})}
+ await c.run(tasks.a)
+ expect(entered).toHaveLength(1);expect(entered[0]).not.toBe(official);expect(tasks.a.message).toBe('ordinary list read');expect(c.platformRuns).toEqual([])
+})
+it('opens ordinary detail extraction after an official-export view without rejecting its own lease',async()=>{
+ const {c,tasks}=alibabaModeFixture();const official=await c.ensure('alibaba','official-export');const entered:any[]=[]
+ c.alibabaDetails=async(_task:any,view:any)=>entered.push(view)
+ await c.enrichDetails(tasks.a)
+ expect(entered).toHaveLength(1);expect(entered[0]).not.toBe(official);expect(c.platformRuns).toEqual([])
+})
+it('opens an ordinary order detail after an official view but rejects mode switches owned by another run',async()=>{
+ const {c}=alibabaModeFixture();const official=await c.ensure('alibaba','official-export');const other=c.registry.acquire('alibaba','other')
+ await expect(c.show('alibaba','ordinary')).rejects.toThrow(/暂停/)
+ expect(c.views.get('alibaba')).toBe(official);c.registry.release(other)
+ c.navigateDetail=async()=>{}
+ await expect(c.openOrder({platform:'alibaba',id:'123',detailUrl:'https://trade.1688.com/order/detail.htm?orderId=123'})).resolves.toBeUndefined()
+ expect(c.current).not.toBe(official);expect(c.platformRuns).toEqual([])
+})
 it('routes valid captured orders to their owner and drops valid old-generation payloads',()=>{
  const {c,tasks,store}=fixture();Object.assign(tasks.a,{platform:'alibaba',pages:0,count:0})
  const old=c.registry.acquire('alibaba','a'),other=c.registry.acquire('jd','b'),capture=c.capture('alibaba')
