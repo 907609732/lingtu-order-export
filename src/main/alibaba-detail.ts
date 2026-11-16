@@ -1,7 +1,25 @@
 import ExcelJS from 'exceljs'
-import type {Order} from '../shared/types'
+import type {Order,Task} from '../shared/types'
+import {createHash} from 'node:crypto'
 import {dateText} from '../core/values'
 import {CollectionError} from './collection-errors'
+
+export interface AlibabaDetailRecord {path?:string;gmtCreate?:string;exportStatus?:string}
+/** The response timestamp can lag the report's creation second. Bind to the
+ * pre-submit baseline and a unique, narrowly timed new record instead of exact seconds.
+ * With a server token, compare platform times only; the PC clock can be skewed. */
+export function selectAlibabaDetailReport(records:AlibabaDetailRecord[],checkpoint:NonNullable<Task['detailExport']>):AlibabaDetailRecord|undefined{
+ const requested=Date.parse(checkpoint.requestedAt),token=checkpoint.token===undefined?undefined:Number(checkpoint.token)
+ if(!Array.isArray(checkpoint.previous)||(token===undefined?!Number.isFinite(requested):!/^\d{13}$/.test(checkpoint.token!)||!Number.isFinite(token)))throw new CollectionError('response_structure')
+ const candidates=records.filter(record=>{
+  if(record.exportStatus!=='SUCCESS'||typeof record.path!=='string'||!record.path||checkpoint.previous.includes(createHash('sha256').update(record.path).digest('hex')))return false
+  const stamp=dateText(record.gmtCreate);if(!stamp)return false
+  const created=Date.parse(stamp.replace(' ','T')+'+08:00')
+  return token===undefined?created>=requested-1000&&created<=requested+30000:Math.abs(created-token)<=5000
+ })
+ if(candidates.length>1)throw new CollectionError('response_structure')
+ return candidates[0]
+}
 
 const aliases={id:['订单编号','订单号'],receiver:['收货人姓名','收货人'],address:['收货地址'],phone:['联系手机','联系电话','收货电话'],logistics:['物流公司'],tracking:['运单号','物流单号','快递单号'],remark:['订单备注','买家留言'],paidAt:['付款时间','支付时间'],shippedAt:['发货时间'],completedAt:['完成时间','交易成功时间']} as const
 // Read loaded values only: formulas use cached results and hyperlinks use display text.

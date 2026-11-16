@@ -18,7 +18,7 @@ import { pddPageRequest, pddDetailRequest } from './pdd-page'
 import { normalizePddDetail } from '../core/pdd-normalize'
 import {taobaoDetailUrl,readTaobaoDetailPage,mergeTaobaoVisibleDetail} from './taobao-detail'
 import {platformDetailUrl,mergePlatformVisibleDetail} from './platform-detail'
-import {readAlibabaExport} from './alibaba-detail'
+import {readAlibabaExport,selectAlibabaDetailReport,type AlibabaDetailRecord} from './alibaba-detail'
 import {downloadAlibabaDetailExport} from './alibaba-detail-download'
 import {isAlibabaLoginLanding,alibabaBrowserUserAgent} from './platform-login'
 import {JdExportError,clickJdExportAction} from './jd-export'
@@ -579,7 +579,7 @@ export class Collector {
   }
   private async alibabaDetails(task:Task,view:WebContentsView){
     const api='mtop.1688.trading.dataline.service',hash=(value:string)=>createHash('sha256').update(value).digest('hex')
-    const records=async()=>{const response=await this.request(view,api,{serviceId:'OrderExportDataLineService.exportRecords',param:'buyerOrder'},'alibaba',task);if(!Array.isArray(response?.data?.data))throw new CollectionError('response_structure');return response.data.data as {path?:string;gmtCreate?:string;exportStatus?:string}[]}
+    const records=async()=>{const response=await this.request(view,api,{serviceId:'OrderExportDataLineService.exportRecords',param:'buyerOrder'},'alibaba',task);if(!Array.isArray(response?.data?.data))throw new CollectionError('response_structure');return response.data.data as AlibabaDetailRecord[]}
     let checkpoint=this.store.get(task.id).detailExport
     if(!checkpoint){
       this.store.update(task.id,{message:'正在读取1688已有报表记录'});this.changed()
@@ -593,11 +593,10 @@ export class Collector {
     for(let attempt=0;attempt<12&&!this.stopped.has(task.id);attempt++){
       this.stage(task,{phase:'detail',current:attempt+1,total:12});this.store.update(task.id,{message:`等待1688官方详情文件生成（${attempt+1} / 12），可以暂停后继续`});this.changed()
       const all=await records();if(this.stopped.has(task.id))return
-      const candidates=all.filter(r=>{if(r.exportStatus!=='SUCCESS'||!r.path||checkpoint!.previous.includes(hash(r.path)))return false;const stamp=dateText(r.gmtCreate);if(checkpoint!.token)return stamp===dateText(Number(checkpoint!.token));const delta=Date.parse(stamp.replace(' ','T')+'+08:00')-Date.parse(checkpoint!.requestedAt);return delta>=-1000&&delta<=30000})
-      if(candidates.length>1)throw new CollectionError('response_structure')
-      if(candidates.length===1){
+      const candidate=selectAlibabaDetailReport(all,checkpoint)
+      if(candidate){
         this.store.update(task.id,{message:'正在下载1688官方详情报表'});this.changed()
-        const bytes=await downloadAlibabaDetailExport(candidates[0].path!,url=>view.webContents.session.fetch(url),()=>this.stopped.has(task.id))
+        const bytes=await downloadAlibabaDetailExport(candidate.path!,url=>view.webContents.session.fetch(url),()=>this.stopped.has(task.id))
         if(!bytes||this.stopped.has(task.id))return
         this.store.update(task.id,{message:'正在解析1688官方详情报表'});this.changed()
         const rows=await readAlibabaExport(bytes,pendingDetails(this.store.orders(task.id)))
