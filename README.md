@@ -36,11 +36,19 @@
 
 ## 下载安装
 
-当前公开版本：**v0.1.21**。软件已统一更名为“电商平台采购订单导出”。
+当前公开版本：**v0.1.27**。软件已统一更名为“电商平台采购订单导出”。
 
 前往 [GitHub Releases](https://github.com/907609732/lingtu-order-export/releases/latest)，下载 Windows x64 的 `LingtuOrderExport-版本号-Setup.exe` 安装包。Source code ZIP 是源码，不是安装包。
 
 旧版订单与登录数据目录保留兼容。升级前建议备份重要导出文件；安装包尚未配置代码签名，可在发布页核对来源和 SHA-256。
+
+## 灵兔电商工具套件
+
+- [灵兔拆包智录](https://github.com/907609732/lingtu-recorder) — Windows 拆包/打包录像与记录管理。
+- **本项目：电商平台采购订单导出** — 买家采购订单整理及 Excel/CSV 导出。
+- [灵兔AI电商客服](https://github.com/907609732/LTTLT-AI-Customer-Service) — 店铺知识管理与 AI 客服辅助接待。
+
+以上工具可按需要选用，功能、版本和许可请以各项目说明为准。
 
 ## 主要功能
 

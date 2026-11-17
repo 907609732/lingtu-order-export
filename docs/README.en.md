@@ -36,11 +36,19 @@ Collect buyer-side order history on Windows and turn it into Excel / CSV.
 
 ## Download and install
 
-Current public release: **v0.1.21**. The application is now named “电商平台采购订单导出”. The desktop interface and illustrated guide are currently in Chinese; this page provides English documentation.
+Current public release: **v0.1.27**. The application is now named “电商平台采购订单导出”. The desktop interface and illustrated guide are currently in Chinese; this page provides English documentation.
 
 Open [GitHub Releases](https://github.com/907609732/lingtu-order-export/releases/latest) and download the Windows x64 installer named `LingtuOrderExport-<version>-Setup.exe`. The Source code ZIP is not an installer.
 
 Existing order and login data directories remain compatible. Back up important exports before upgrading. The installer is not code-signed; check its source and SHA-256 on the release page.
+
+## Lingtu E-commerce Toolkit
+
+- [Lingtu Unpack Recorder](https://github.com/907609732/lingtu-recorder/blob/main/README.en.md) — Windows unpacking/packing recording and record management.
+- **This project: E-commerce Purchase Order Export** — buyer purchase order organization and Excel/CSV export.
+- [Lingtu AI E-commerce Customer Service](https://github.com/907609732/LTTLT-AI-Customer-Service) — store knowledge management and AI-assisted customer reception (Chinese only).
+
+These tools can be used as needed; see each project's documentation for features, versions, and licenses.
 
 ## Features
 
