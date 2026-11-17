@@ -44,9 +44,11 @@ Existing order and login data directories remain compatible. Back up important e
 
 ## Lingtu E-commerce Toolkit
 
-- [Lingtu Unpack Recorder](https://github.com/907609732/lingtu-recorder/blob/main/README.en.md) — Windows unpacking/packing recording and record management.
-- **This project: E-commerce Purchase Order Export** — buyer purchase order organization and Excel/CSV export.
-- [Lingtu AI E-commerce Customer Service](https://github.com/907609732/LTTLT-AI-Customer-Service) — store knowledge management and AI-assisted customer reception (Chinese only).
+| Logo | Project and purpose |
+| :---: | :--- |
+| <a href="https://github.com/907609732/lingtu-recorder/blob/main/README.en.md"><img src="https://raw.githubusercontent.com/907609732/lingtu-recorder/main/docs/assets/logo.png" width="96" height="96" alt="Lingtu Unpack Recorder Logo"></a> | **[Lingtu Unpack Recorder](https://github.com/907609732/lingtu-recorder/blob/main/README.en.md)**<br>Windows unpacking/packing recording and record management. |
+| <a href="https://github.com/907609732/lingtu-order-export/blob/master/docs/README.en.md"><img src="https://raw.githubusercontent.com/907609732/lingtu-order-export/master/build/icon.png" width="96" height="96" alt="E-commerce Purchase Order Export Logo"></a> | **[This project: E-commerce Purchase Order Export](https://github.com/907609732/lingtu-order-export/blob/master/docs/README.en.md)**<br>Buyer purchase-order organization with Excel/CSV export. |
+| <a href="https://github.com/907609732/LTTLT-AI-Customer-Service"><img src="https://raw.githubusercontent.com/907609732/LTTLT-AI-Customer-Service/main/src/assets/lingtu-ai-icon.png" width="96" height="96" alt="Lingtu AI E-commerce Customer Service Logo"></a> | **[Lingtu AI E-commerce Customer Service](https://github.com/907609732/LTTLT-AI-Customer-Service)**<br>Store knowledge management and AI-assisted customer reception (Chinese). |
 
 These tools can be used as needed; see each project's documentation for features, versions, and licenses.
 
