@@ -6,7 +6,9 @@
 
 **Your purchase history. Organized, searchable, exportable.**
 
-Collect buyer-side order history on Windows and turn it into Excel / CSV.
+**The purchase-data entry point of the Lingtu AI E-commerce Traceability Suite.**
+
+Collect buyer-side order history on Windows, organize products, variants, amounts and logistics, and export Excel / CSV to review purchase sources, costs and incoming parcels. [Local AI integration](LOCAL_AI.md) lets agents query tasks, collect orders and export files.
 
 [简体中文](../README.md) · **English**
 
@@ -21,6 +23,18 @@ Collect buyer-side order history on Windows and turn it into Excel / CSV.
 </div>
 
 ---
+
+## Lingtu AI E-commerce Traceability Suite
+
+Three complementary apps cover purchase records, parcel evidence and AI-assisted customer service.
+
+| Logo | Project and purpose |
+| :---: | :--- |
+| <a href="https://github.com/907609732/lingtu-recorder/blob/main/README.en.md"><img src="https://raw.githubusercontent.com/907609732/lingtu-recorder/main/docs/assets/logo.png" width="96" height="96" alt="Lingtu Unpack Recorder Logo"></a> | **[Lingtu Unpack Recorder](https://github.com/907609732/lingtu-recorder/blob/main/README.en.md)**<br>Parcel evidence: find unpacking/packing videos, photos and exception notes by tracking number. |
+| <a href="https://github.com/907609732/lingtu-order-export/blob/master/docs/README.en.md"><img src="https://raw.githubusercontent.com/907609732/lingtu-order-export/master/build/icon.png" width="96" height="96" alt="E-commerce Purchase Order Export Logo"></a> | **[This project: E-commerce Purchase Order Export](https://github.com/907609732/lingtu-order-export/blob/master/docs/README.en.md)**<br>Purchase traceability: organize buyer orders, product details and logistics; export Excel/CSV. |
+| <a href="https://github.com/907609732/LTTLT-AI-Customer-Service/blob/main/README.en.md"><img src="https://raw.githubusercontent.com/907609732/LTTLT-AI-Customer-Service/main/src/assets/lingtu-ai-icon.png" width="96" height="96" alt="Lingtu AI E-commerce Customer Service Logo"></a> | **[Lingtu AI E-commerce Customer Service](https://github.com/907609732/LTTLT-AI-Customer-Service/blob/main/README.en.md)**<br>After-sales support: store/product knowledge and AI-assisted customer replies. |
+
+Use the apps together to review purchases, parcel handling and after-sales cases. They are installed separately and keep their own data; records are not automatically shared.
 
 ## Product preview
 
@@ -41,16 +55,6 @@ Current public release: **v0.1.27**. The application is now named “电商平�
 Open [GitHub Releases](https://github.com/907609732/lingtu-order-export/releases/latest) and download the Windows x64 installer named `LingtuOrderExport-<version>-Setup.exe`. The Source code ZIP is not an installer.
 
 Existing order and login data directories remain compatible. Back up important exports before upgrading. The installer is not code-signed; check its source and SHA-256 on the release page.
-
-## Lingtu E-commerce Toolkit
-
-| Logo | Project and purpose |
-| :---: | :--- |
-| <a href="https://github.com/907609732/lingtu-recorder/blob/main/README.en.md"><img src="https://raw.githubusercontent.com/907609732/lingtu-recorder/main/docs/assets/logo.png" width="96" height="96" alt="Lingtu Unpack Recorder Logo"></a> | **[Lingtu Unpack Recorder](https://github.com/907609732/lingtu-recorder/blob/main/README.en.md)**<br>Windows unpacking/packing recording and record management. |
-| <a href="https://github.com/907609732/lingtu-order-export/blob/master/docs/README.en.md"><img src="https://raw.githubusercontent.com/907609732/lingtu-order-export/master/build/icon.png" width="96" height="96" alt="E-commerce Purchase Order Export Logo"></a> | **[This project: E-commerce Purchase Order Export](https://github.com/907609732/lingtu-order-export/blob/master/docs/README.en.md)**<br>Buyer purchase-order organization with Excel/CSV export. |
-| <a href="https://github.com/907609732/LTTLT-AI-Customer-Service"><img src="https://raw.githubusercontent.com/907609732/LTTLT-AI-Customer-Service/main/src/assets/lingtu-ai-icon.png" width="96" height="96" alt="Lingtu AI E-commerce Customer Service Logo"></a> | **[Lingtu AI E-commerce Customer Service](https://github.com/907609732/LTTLT-AI-Customer-Service)**<br>Store knowledge management and AI-assisted customer reception (Chinese). |
-
-These tools can be used as needed; see each project's documentation for features, versions, and licenses.
 
 ## Features
 
